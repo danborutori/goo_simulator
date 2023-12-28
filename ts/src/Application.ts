@@ -1,4 +1,5 @@
-import {BoxGeometry, Mesh, MeshBasicMaterial, PerspectiveCamera, Quaternion, Scene, Vector3, WebGLRenderer} from "three"
+import {DoubleSide, Mesh, MeshBasicMaterial, PerspectiveCamera, PlaneGeometry, Quaternion, Scene, Vector3, WebGLRenderer} from "three"
+import { GooSimulator } from "./GooSimulator.js"
 
 const v1 = new Vector3
 const q1 = new Quaternion
@@ -7,23 +8,19 @@ function createScene(){
     const scene = new Scene
 
     const camera = new PerspectiveCamera
-    camera.position.set(0,5,0)
+    camera.position.set(0,2,-2)
     camera.lookAt(v1.set(0,0,0))
-
-    const box = new Mesh(
-        new BoxGeometry(1,1,1),
-        new MeshBasicMaterial({
-            color: 0xff0000
-        })
-    )
-
     scene.add(camera)
-    scene.add(box)
+
+    const plane = new Mesh(
+        new PlaneGeometry(1,1),
+        new MeshBasicMaterial({color:0xffffff})
+    ).rotateX(-Math.PI/2)
+    scene.add(plane)
 
     return {
         scene: scene,
-        camera: camera,
-        box: box
+        camera: camera
     }
 }
 
@@ -31,14 +28,18 @@ export class Application {
 
     private scene: Scene
     private camera: PerspectiveCamera
-    private box: Mesh
     private renderer!: WebGLRenderer
+
+    private gooSimulator: GooSimulator
 
     constructor(){
         const s = createScene()
         this.scene = s.scene
         this.camera = s.camera
-        this.box = s.box
+
+        this.gooSimulator = new GooSimulator(256,1024)
+        this.gooSimulator.instancedMesh.position.set(0,0.02,0)
+        this.scene.add(this.gooSimulator.instancedMesh)
     }
 
     init(mainCanvas: HTMLCanvasElement){
@@ -48,7 +49,8 @@ export class Application {
         mainCanvas.height = window.innerHeight        
 
         this.renderer = new WebGLRenderer({
-            canvas: mainCanvas
+            canvas: mainCanvas,
+            antialias: true
         })
         this.renderer.setClearColor(0x0000ff)
 
@@ -81,7 +83,7 @@ export class Application {
 
     private update( deltaTime: number ){
 
-        this.box.quaternion.multiply( q1.setFromAxisAngle(v1.set(0,1,0), Math.PI*deltaTime))
+        this.gooSimulator.update(deltaTime)
 
     }
 
