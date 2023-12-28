@@ -5,5 +5,5 @@ declare const hudRoot: HTMLDivElement
 
 const app = new Application()
 
-app.init(mainCanvas, hudRoot)
-app.start()
+app.init(mainCanvas)
+app.start(hudRoot)

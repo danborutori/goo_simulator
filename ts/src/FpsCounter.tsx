@@ -1,21 +1,20 @@
 import React from "react"
 
-export class FpsCounter extends React.Component<{getFps: ()=>number}, {fps: number}> {
+interface FPSProvider {
+    currentFps: number
+}
+
+interface Props {
+    fpsProvider: FPSProvider
+}
+
+export class FpsCounter extends React.Component<Props, FPSProvider> {
 
     private interval?: number
 
-    constructor(props: {getFps: ()=>number}){
-        super(props)
-        this.setState({
-            fps: 0
-        })
-    }
-
     componentDidMount(): void {
         this.interval = setInterval(()=>{
-            this.setState({ 
-                fps: this.props.getFps()
-            })
+            this.setState(this.props.fpsProvider)
         })
     }
 
@@ -35,6 +34,6 @@ export class FpsCounter extends React.Component<{getFps: ()=>number}, {fps: numb
             backgroundColor: "black",
             display: "inline-block",
             width: "auto"
-        }}>FPS:&nbsp;{this.state && this.state.fps}</div>
+        }}>FPS:&nbsp;{this.state && this.state.currentFps}</div>
     }
 }

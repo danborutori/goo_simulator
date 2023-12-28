@@ -32,9 +32,7 @@ export class Application {
     private camera: PerspectiveCamera
     private renderer!: WebGLRenderer
 
-    private currentFps = 0
     private gooSimulator: GooSimulator
-    private fpsCounter = <FpsCounter getFps={()=>this.currentFps}/>
 
     constructor(){
         const s = createScene()
@@ -46,7 +44,7 @@ export class Application {
         this.scene.add(this.gooSimulator.instancedMesh)
     }
 
-    init(mainCanvas: HTMLCanvasElement, hudRoot: HTMLDivElement){
+    init(mainCanvas: HTMLCanvasElement){
 
         // init canvas
         mainCanvas.width = window.innerWidth
@@ -62,14 +60,17 @@ export class Application {
         this.camera.updateProjectionMatrix()
 
         window.addEventListener("resize", ()=>{ this.onResize() })
-
-        ReactDOM.render(this.fpsCounter, hudRoot)
     }
 
-    start(){
+    start(hudRoot: HTMLDivElement){
         let currentTime = performance.now()
         let frameRequested = false
         let frameDrawn = 0
+        const fpsProvider = {
+            currentFps: 0
+        }
+
+        ReactDOM.render(<FpsCounter fpsProvider={fpsProvider}/>, hudRoot)
 
         setInterval(()=>{
             if( !frameRequested ){
@@ -89,7 +90,7 @@ export class Application {
         }, 10)
 
         setInterval(()=>{
-            this.currentFps = frameDrawn
+            fpsProvider.currentFps = frameDrawn
             frameDrawn = 0
         }, 1000)
     }
