@@ -1,0 +1,38 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "build ts",
+			"type": "shell",
+			"command": "build.bat",
+			"options": {
+				"cwd": "ts",
+				"shell": {
+					"executable": "cmd.exe",
+					"args": [
+						"/d",
+						"/c"
+					]
+				}
+			}
+		},
+		{
+			"label": "start server",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"http-server"
+			],
+			"options": {
+				"cwd": "html",
+				"shell": {
+					"executable": "cmd.exe",
+					"args": [
+						"/d",
+						"/c"
+					]
+				}
+			}
+		}
+	]
+}

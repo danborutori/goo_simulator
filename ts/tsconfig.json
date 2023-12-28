@@ -1,0 +1,25 @@
+{
+    "compilerOptions": {
+		"strict": true,
+        "target": "es6",
+        "moduleResolution": "Classic",
+        "module": "ES6",
+        "esModuleInterop": true,
+        "sourceMap": false,
+        "noEmitOnError": true,
+        "jsx": "react",
+        "lib": ["es6", "dom"],
+    	"outDir": "../html/script",
+		"rootDir": "src",
+		"removeComments": true,
+		"typeRoots": [
+			"../node_modules/@types/"
+		]
+    },	
+    "include": [
+		"src/**/*.ts",
+		"src/**/*.tsx"
+	],
+	"compileOnSave": true,
+	"buildOnSave": true
+}

@@ -1,0 +1,20 @@
+{
+  "name": "goo_simulator",
+  "authors": [
+    "anmc <lamylanmc@hotmail.com>"
+  ],
+  "description": "",
+  "main": "",
+  "license": "MIT",
+  "homepage": "",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+      "three.js": "https://github.com/mrdoob/three.js.git"
+  }
+}
