@@ -5,3 +5,4 @@ declare const mainCanvas: HTMLCanvasElement
 const app = new Application()
 
 app.init(mainCanvas)
+app.start()
