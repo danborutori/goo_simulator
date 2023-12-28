@@ -5,7 +5,15 @@
         <script type="importmap">
             {
                 "imports": {
-                    "three": "./script/lib/three.module.min.js"
+                    "three": "./script/lib/three.module.min.js",
+                    "react": "https://ga.jspm.io/npm:react@18.0.0-rc.0/index.js",
+                    "react-dom": "https://ga.jspm.io/npm:react-dom@18.2.0/index.js",
+                    "scheduler": "https://ga.jspm.io/npm:scheduler@0.23.0/index.js"
+                },
+                "scopes": {
+                    "https://ga.jspm.io/npm:react@18.0.0-rc.0/": {
+                        "object-assign": "https://ga.jspm.io/npm:object-assign@4.1.1/index.js"
+                    }
                 }
             }
         </script>
@@ -14,6 +22,7 @@
         <canvas id="mainCanvas" style="width: 100%; height: 100%;">
             // canvas not supported
         </canvas>
+        <div id="hudRoot" style="position: absolute; left: 0; top: 0;"></div>
         <script type="module" src="./script/main.js">// module not supported </script>
     </body>
 </html>

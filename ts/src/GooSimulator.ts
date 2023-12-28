@@ -15,6 +15,7 @@ const gravity = new Vector3(0,-9.8,0)
 
 const stiffness = 1000
 const dampingFactor = 0.5
+const subStep = 6
 
 export class GooSimulator {
 
@@ -53,7 +54,8 @@ export class GooSimulator {
 
     update( deltaTime: number ){
 
-        this.simulate( deltaTime )
+        for( let i=0; i<subStep; i++ )
+            this.simulate( deltaTime/subStep )
 
     }
 

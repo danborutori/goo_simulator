@@ -1,8 +1,10 @@
-import {DoubleSide, Mesh, MeshBasicMaterial, PerspectiveCamera, PlaneGeometry, Quaternion, Scene, Vector3, WebGLRenderer} from "three"
+import {Mesh, MeshBasicMaterial, PerspectiveCamera, PlaneGeometry, Scene, Vector3, WebGLRenderer} from "three"
 import { GooSimulator } from "./GooSimulator.js"
+import { FpsCounter } from "./FpsCounter.js"
+import ReactDOM from "react-dom"
+import React, { useState } from "react"
 
 const v1 = new Vector3
-const q1 = new Quaternion
 
 function createScene(){
     const scene = new Scene
@@ -30,7 +32,9 @@ export class Application {
     private camera: PerspectiveCamera
     private renderer!: WebGLRenderer
 
+    private currentFps = 0
     private gooSimulator: GooSimulator
+    private fpsCounter = <FpsCounter getFps={()=>this.currentFps}/>
 
     constructor(){
         const s = createScene()
@@ -42,7 +46,7 @@ export class Application {
         this.scene.add(this.gooSimulator.instancedMesh)
     }
 
-    init(mainCanvas: HTMLCanvasElement){
+    init(mainCanvas: HTMLCanvasElement, hudRoot: HTMLDivElement){
 
         // init canvas
         mainCanvas.width = window.innerWidth
@@ -58,27 +62,36 @@ export class Application {
         this.camera.updateProjectionMatrix()
 
         window.addEventListener("resize", ()=>{ this.onResize() })
+
+        ReactDOM.render(this.fpsCounter, hudRoot)
     }
 
     start(){
         let currentTime = performance.now()
         let frameRequested = false
+        let frameDrawn = 0
 
         setInterval(()=>{
-            const newTime = performance.now()
-            const deltaTime = (newTime-currentTime)/1000
-            this.update( deltaTime )
-            currentTime = newTime
-
             if( !frameRequested ){
+                const newTime = performance.now()
+                const deltaTime = Math.min(1/30,(newTime-currentTime)/1000)
+                this.update( deltaTime )
+                currentTime = newTime
+
                 frameRequested = true
                 requestAnimationFrame( ()=>{
                     frameRequested = false
                     this.render()
+                    frameDrawn++
                 })
             }
     
-            }, 10)
+        }, 10)
+
+        setInterval(()=>{
+            this.currentFps = frameDrawn
+            frameDrawn = 0
+        }, 1000)
     }
 
     private update( deltaTime: number ){
