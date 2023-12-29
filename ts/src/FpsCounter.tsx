@@ -1,37 +1,18 @@
 import React from "react"
 
-interface FPSProvider {
-    currentFps: number
-}
+export class FpsCounter extends React.Component<{}, {fps: number}> {
 
-interface Props {
-    fpsProvider: FPSProvider
-}
-
-export class FpsCounter extends React.Component<Props, FPSProvider> {
-
-    private interval?: number
-
-    constructor(props: Props){
-        super(props)
-        this.state = {
-            currentFps: 0
-        }
+    state = {
+        fps: 0
     }
 
-    componentDidMount(): void {
-        this.interval = setInterval(()=>{
-            this.setState(this.props.fpsProvider)
+    get currentFps() { return this.state.fps }
+    set currentFps( n: number ){
+        this.setState({
+            fps: n
         })
     }
 
-    componentWillUnmount(): void {
-        if(this.interval !== undefined){
-            clearInterval(this.interval)
-            this.interval = undefined
-        }
-    }
-    
     render(): React.ReactNode {
         return <div style={{
             position: "absolute",
@@ -41,6 +22,6 @@ export class FpsCounter extends React.Component<Props, FPSProvider> {
             backgroundColor: "black",
             display: "inline-block",
             width: "auto"
-        }}>FPS:&nbsp;{this.state.currentFps}</div>
+        }}>FPS:&nbsp;{this.state.fps}</div>
     }
 }

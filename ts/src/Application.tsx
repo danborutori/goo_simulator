@@ -66,11 +66,8 @@ export class Application {
         let currentTime = performance.now()
         let frameRequested = false
         let frameDrawn = 0
-        const fpsProvider = {
-            currentFps: 0
-        }
 
-        ReactDOM.render(<FpsCounter fpsProvider={fpsProvider}/>, hudRoot)
+        const fpsCounter = ReactDOM.render(<FpsCounter/>, hudRoot) as unknown as FpsCounter
 
         setInterval(()=>{
             if( !frameRequested ){
@@ -90,7 +87,7 @@ export class Application {
         }, 10)
 
         setInterval(()=>{
-            fpsProvider.currentFps = frameDrawn
+            fpsCounter.currentFps = frameDrawn
             frameDrawn = 0
         }, 1000)
     }
