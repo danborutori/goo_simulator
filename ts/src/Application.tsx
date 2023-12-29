@@ -1,4 +1,4 @@
-import {BackSide, BufferGeometry, FrontSide, Material, Mesh, Object3D, PCFSoftShadowMap, PerspectiveCamera, Scene, Vector3, WebGLRenderer} from "three"
+import {BufferGeometry, Mesh, Object3D, PCFSoftShadowMap, PerspectiveCamera, Vector3, WebGLRenderer} from "three"
 import { GooSimulator } from "./GooSimulator.js"
 import { FpsCounter } from "./FpsCounter.js"
 import ReactDOM from "react-dom"
@@ -59,9 +59,8 @@ export class Application {
         private camera: PerspectiveCamera
     ){
         const bvh = buildBvhMesh(scene)
-        this.gooSimulator = new GooSimulator(bvh,1024)
-        this.gooSimulator.instancedMesh.position.set(0,0.02,0)
-        this.scene.add(this.gooSimulator.instancedMesh)
+        this.gooSimulator = new GooSimulator(bvh,500)
+        this.scene.add(this.gooSimulator)
     }
 
     init(mainCanvas: HTMLCanvasElement){
