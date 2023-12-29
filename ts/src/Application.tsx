@@ -26,6 +26,7 @@ async function createScene(){
 }
 
 function buildBvhMesh( scene: Object3D){
+    scene.updateMatrixWorld()
     const geometries: BufferGeometry[] = []
 
     scene.traverse( ((m: Mesh)=>{
