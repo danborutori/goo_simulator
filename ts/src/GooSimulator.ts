@@ -1,4 +1,5 @@
 import { InstancedMesh, Matrix4, MeshBasicMaterial, SphereGeometry, Vector3 } from "three";
+import { MeshBVH } from "three-mesh-bvh";
 
 const v1 = new Vector3
 const m1 = new Matrix4
@@ -23,6 +24,7 @@ export class GooSimulator {
     readonly instancedMesh: InstancedMesh
 
     constructor(
+        bvhMesh: MeshBVH,
         volume: number,
         particleCount: number
     ){

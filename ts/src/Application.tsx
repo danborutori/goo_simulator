@@ -1,9 +1,10 @@
-import {Object3D, PerspectiveCamera, Scene, Vector3, WebGLRenderer} from "three"
+import {BackSide, BufferGeometry, FrontSide, Material, Mesh, Object3D, PCFSoftShadowMap, PerspectiveCamera, Scene, Vector3, WebGLRenderer} from "three"
 import { GooSimulator } from "./GooSimulator.js"
 import { FpsCounter } from "./FpsCounter.js"
 import ReactDOM from "react-dom"
 import React from "react"
-import {GLTFLoader} from "three/examples/jsm/Addons"
+import {GLTFLoader, BufferGeometryUtils} from "three/examples/jsm/Addons"
+import { MeshBVH } from "three-mesh-bvh"
 
 const v1 = new Vector3
 
@@ -24,6 +25,22 @@ async function createScene(){
     }
 }
 
+function buildBvhMesh( scene: Object3D){
+    const geometries: BufferGeometry[] = []
+
+    scene.traverse( ((m: Mesh)=>{
+        if( m.isMesh ){
+            const g = m.geometry.clone()
+            g.applyMatrix4(m.matrixWorld)
+            geometries.push(g)
+        }
+    }) as (o:Object3D)=>void)
+
+    const merged = BufferGeometryUtils.mergeGeometries(geometries)
+
+    return new MeshBVH(merged)
+}
+
 export class Application {
 
     private renderer!: WebGLRenderer
@@ -40,7 +57,8 @@ export class Application {
         private scene: Object3D,
         private camera: PerspectiveCamera
     ){
-        this.gooSimulator = new GooSimulator(256,1024)
+        const bvh = buildBvhMesh(scene)
+        this.gooSimulator = new GooSimulator(bvh,256,1024)
         this.gooSimulator.instancedMesh.position.set(0,0.02,0)
         this.scene.add(this.gooSimulator.instancedMesh)
     }
@@ -56,6 +74,7 @@ export class Application {
             antialias: true
         })
         this.renderer.shadowMap.enabled = true
+        this.renderer.shadowMap.type = PCFSoftShadowMap
         this.renderer.setClearColor(0x0000ff)
 
         this.camera.aspect = mainCanvas.width/mainCanvas.height
