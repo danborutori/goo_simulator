@@ -78,13 +78,14 @@ export class Application {
         this.camera.aspect = mainCanvas.width/mainCanvas.height
         this.camera.updateProjectionMatrix()
 
+        const controls = new OrbitControls(this.camera, mainCanvas)
+        controls.enablePan = false
+        controls.enableZoom = false
+        controls.maxPolarAngle = Math.PI/2
+        controls.target.set(0,1,0)
+        controls.update()
+
         window.addEventListener("resize", ()=>{ this.onResize() })
-
-        const control = new OrbitControls(this.camera, mainCanvas)
-        control.enablePan = false
-        control.enableZoom = false
-        control.maxPolarAngle = Math.PI/2        
-
 
     }
 

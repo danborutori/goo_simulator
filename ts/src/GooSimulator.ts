@@ -32,7 +32,7 @@ const dampingFactor = 0.99
 const subStep = 2
 const radius = 0.02
 const formLinkDistance = radius*2
-const breakLinkDistance = formLinkDistance*20
+const breakLinkDistance = formLinkDistance*5
 
 const _deleteLinks: string[] = []
 
@@ -86,9 +86,6 @@ export class GooSimulator extends Group {
         this.linksLine.castShadow = true
         this.linksLine.receiveShadow = false
         this.add(this.linksLine)
-        this.linksLine.onBeforeRender = ()=>{
-            this.updateLines()
-        }
 
         this.surfaceLinkLine = new LineSegments( new BufferGeometry(), new LineBasicMaterial({
             color: 0x0000ff
@@ -97,9 +94,6 @@ export class GooSimulator extends Group {
         this.surfaceLinkLine.castShadow = true
         this.surfaceLinkLine.receiveShadow = false
         this.add(this.surfaceLinkLine)
-        this.surfaceLinkLine.onBeforeRender = ()=>{
-            this.updateSurfaceLines()
-        }
     }
 
     update( deltaTime: number ){
@@ -107,6 +101,8 @@ export class GooSimulator extends Group {
         for( let i=0; i<subStep; i++ )
             this.simulate( deltaTime/subStep )
 
+        this.updateLines()
+        this.updateSurfaceLines()
     }
 
     private simulate( deltaTime: number ){
@@ -207,11 +203,11 @@ export class GooSimulator extends Group {
                     p2.position
                 )
                 const d = v1.length()
+                const key = `${i},${j}`
                 if( d<=formLinkDistance &&
-                    !this.links.has(`${j},${i}`) &&
-                    !this.links.has(`${i},${j}`)
+                    !this.links.has(key)
                 ){
-                    this.links.set(`${i},${j}`, {
+                    this.links.set(key, {
                         a: p1,
                         b: p2
                     })
