@@ -1,4 +1,4 @@
-import {BufferGeometry, Mesh, Object3D, PCFSoftShadowMap, PerspectiveCamera, Vector3, WebGLRenderer} from "three"
+import {AmbientLight, BufferGeometry, Mesh, Object3D, PCFSoftShadowMap, PerspectiveCamera, Vector3, WebGLRenderer} from "three"
 import { GooSimulator } from "./GooSimulator.js"
 import { FpsCounter } from "./FpsCounter.js"
 import ReactDOM from "react-dom"
@@ -16,6 +16,8 @@ async function createScene(){
         o.castShadow = true
         o.receiveShadow = true
     })
+
+    scene.add(new AmbientLight(0x404040))
 
     return {
         scene: scene,

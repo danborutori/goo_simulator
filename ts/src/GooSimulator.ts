@@ -27,9 +27,9 @@ const gravity = new Vector3(0,-9.8,0)
 
 const stiffness = 1000
 const linkStrength = 10
-const stickyness = 0.25
+const stickyness = 1.5
 const dampingFactor = 0.99
-const subStep = 2
+const subStep = 3
 const radius = 0.02
 const formLinkDistance = radius*2
 const breakLinkDistance = formLinkDistance*5
@@ -255,7 +255,7 @@ export class GooSimulator extends Group {
         position.needsUpdate = true
 
         let index = g.index
-        if( !index || index.count!=this.links.size*2 ){
+        if( !index || index.array.length<this.links.size*2 ){
             index = new BufferAttribute( new Uint16Array(this.links.size*2), 1 )
             g.setIndex(index)
         }
@@ -266,6 +266,7 @@ export class GooSimulator extends Group {
             i++
         }
         index.needsUpdate = true
+        ;(index as any).count = this.links.size*2
     }
 
     private updateSurfaceLines(){
@@ -286,7 +287,7 @@ export class GooSimulator extends Group {
         position.needsUpdate = true
 
         let index = g.index
-        if( !index || index.count!=this.surfaceLinks.size*2 ){
+        if( !index || index.array.length<this.surfaceLinks.size*2 ){
             index = new BufferAttribute( new Uint16Array(this.surfaceLinks.size*2), 1 )
             for( let i=0; i<index.count; i++ ){
                 index.setX(i,i)
@@ -294,5 +295,6 @@ export class GooSimulator extends Group {
             index.needsUpdate = true
             g.setIndex(index)
         }
+        (index as any).count = this.surfaceLinks.size*2
     }
 }
