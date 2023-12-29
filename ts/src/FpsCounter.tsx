@@ -12,6 +12,13 @@ export class FpsCounter extends React.Component<Props, FPSProvider> {
 
     private interval?: number
 
+    constructor(props: Props){
+        super(props)
+        this.state = {
+            currentFps: 0
+        }
+    }
+
     componentDidMount(): void {
         this.interval = setInterval(()=>{
             this.setState(this.props.fpsProvider)
@@ -34,6 +41,6 @@ export class FpsCounter extends React.Component<Props, FPSProvider> {
             backgroundColor: "black",
             display: "inline-block",
             width: "auto"
-        }}>FPS:&nbsp;{this.state && this.state.currentFps}</div>
+        }}>FPS:&nbsp;{this.state.currentFps}</div>
     }
 }
