@@ -67,7 +67,7 @@ export class Application {
         let frameRequested = false
         let frameDrawn = 0
 
-        const fpsCounter = ReactDOM.render(<FpsCounter/>, hudRoot) as unknown as FpsCounter
+        const fpsCounter = ReactDOM.render<{}, FpsCounter>(<FpsCounter/>, hudRoot)
 
         setInterval(()=>{
             if( !frameRequested ){
