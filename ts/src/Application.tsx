@@ -1,15 +1,19 @@
-import {AmbientLight, Mesh, Object3D, PCFSoftShadowMap, PerspectiveCamera, WebGLRenderer} from "three"
+import {AmbientLight, Mesh, Object3D, PCFSoftShadowMap, PerspectiveCamera, Quaternion, Vector3, WebGLRenderer} from "three"
 import { GooSimulator } from "./GooSimulator.js"
 import { FpsCounter } from "./FpsCounter.js"
 import ReactDOM from "react-dom"
 import React from "react"
 import {GLTFLoader, OrbitControls} from "three/examples/jsm/Addons"
 
+const v1 = new Vector3
+const q1 = new Quaternion
+
 async function createScene(){
     const loader = new GLTFLoader()
     const gltf = await loader.loadAsync( "./asset/stage.gltf" )
     const scene = gltf.scene
     const camera = scene.getObjectByName("Camera") as PerspectiveCamera
+    const bunny = scene.getObjectByName("bunny")!
 
     scene.traverse(o=>{
         o.castShadow = true
@@ -20,7 +24,8 @@ async function createScene(){
 
     return {
         scene: scene,
-        camera: camera
+        camera: camera,
+        bunny: bunny
     }
 }
 
@@ -28,17 +33,21 @@ export class Application {
 
     private renderer!: WebGLRenderer
 
+
     private gooSimulator: GooSimulator
+    private bunnyRotDir = 0
 
     static async create(){
         const s = await createScene()
 
-        return new Application( s.scene, s.camera )
+        return new Application( s.scene, s.camera, s.bunny )
     }
+    
 
     private constructor(
         private scene: Object3D,
-        private camera: PerspectiveCamera
+        private camera: PerspectiveCamera,
+        private bunny: Object3D
     ){
         this.gooSimulator = new GooSimulator([
             scene.getObjectByName("bunny") as Mesh,
@@ -72,6 +81,24 @@ export class Application {
         controls.update()
 
         window.addEventListener("resize", ()=>{ this.onResize() })
+        window.addEventListener("keydown", event=>{
+            switch(event.key){
+            case "ArrowRight":
+                this.bunnyRotDir = -1
+                break
+            case "ArrowLeft":
+                this.bunnyRotDir = 1
+                break
+            }
+        })
+        window.addEventListener("keyup", event=>{
+            switch(event.key){
+            case "ArrowRight":
+            case "ArrowLeft":
+                this.bunnyRotDir = 0
+                break
+            }
+        })
 
     }
 
@@ -107,6 +134,7 @@ export class Application {
 
     private update( deltaTime: number ){
 
+        this.bunny.quaternion.multiply(q1.setFromAxisAngle(v1.set(0,0,1), Math.PI*deltaTime*this.bunnyRotDir))
         this.gooSimulator.update(deltaTime)
 
     }
