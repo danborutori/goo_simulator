@@ -16,16 +16,22 @@ interface Link {
     b: Particle
 }
 
+interface ParticleToSurfaceLink {
+    position: Vector3
+    index: number
+    particle: Particle
+}
+
 const particleMass = 0.1
 const gravity = new Vector3(0,-9.8,0)
 
 const stiffness = 1000
 const linkStrength = 10
-const dampingFactor = 0.75
+const dampingFactor = 0.99
 const subStep = 2
 const radius = 0.02
 const formLinkDistance = radius*2
-const breakLinkDistance = formLinkDistance*5
+const breakLinkDistance = formLinkDistance*20
 
 const _deleteLinks: string[] = []
 
@@ -33,6 +39,7 @@ export class GooSimulator extends Group {
 
     private particles: Particle[]
     private links: Map<string, Link> = new Map
+    private surfaceLinks: Map<string, ParticleToSurfaceLink> = new Map
     private instancedMesh: InstancedMesh
     private linksMesh: Line
 
