@@ -17,8 +17,8 @@ interface Link {
 }
 
 interface ParticleToSurfaceLink {
-    position: Vector3
-    index: number
+    point: Vector3
+    faceIndex: number
     particle: Particle
 }
 
@@ -27,6 +27,7 @@ const gravity = new Vector3(0,-9.8,0)
 
 const stiffness = 1000
 const linkStrength = 10
+const stickyness = 0.25
 const dampingFactor = 0.99
 const subStep = 2
 const radius = 0.02
@@ -41,7 +42,8 @@ export class GooSimulator extends Group {
     private links: Map<string, Link> = new Map
     private surfaceLinks: Map<string, ParticleToSurfaceLink> = new Map
     private instancedMesh: InstancedMesh
-    private linksMesh: Line
+    private linksLine: LineSegments
+    private surfaceLinkLine: LineSegments
 
     constructor(
         readonly bvhMesh: MeshBVH,
@@ -52,11 +54,11 @@ export class GooSimulator extends Group {
 
         const width = Math.floor(Math.sqrt(particleCount))
         for( let i=0; i<particleCount; i++ ){
-            const x = (i%width-width/2)*radius*2
-            const z = (Math.floor(i/width)-width/2)*radius*2
+            const position = new Vector3(Math.random(),0,Math.random()).subScalar(0.5).normalize().multiplyScalar(Math.random()*radius*16)
+            position.y = 2+i*radius*0.25 
             this.particles[i] = {
                 index: i,
-                position: new Vector3(x,2,z),
+                position: position,
                 velocity: new Vector3(0,0,0),
                 force: new Vector3(0,0,0)
             }
@@ -77,15 +79,26 @@ export class GooSimulator extends Group {
             this.updateInstanceMatrix()
         }
 
-        this.linksMesh = new LineSegments( new BufferGeometry(), new LineBasicMaterial({
+        this.linksLine = new LineSegments( new BufferGeometry(), new LineBasicMaterial({
             color: 0x00ff00,
         }))
-        this.linksMesh.frustumCulled = false
-        this.linksMesh.castShadow = true
-        this.linksMesh.receiveShadow = false
-        this.add(this.linksMesh)
-        this.linksMesh.onBeforeRender = ()=>{
+        this.linksLine.frustumCulled = false
+        this.linksLine.castShadow = true
+        this.linksLine.receiveShadow = false
+        this.add(this.linksLine)
+        this.linksLine.onBeforeRender = ()=>{
             this.updateLines()
+        }
+
+        this.surfaceLinkLine = new LineSegments( new BufferGeometry(), new LineBasicMaterial({
+            color: 0x0000ff
+        }))
+        this.surfaceLinkLine.frustumCulled = false
+        this.surfaceLinkLine.castShadow = true
+        this.surfaceLinkLine.receiveShadow = false
+        this.add(this.surfaceLinkLine)
+        this.surfaceLinkLine.onBeforeRender = ()=>{
+            this.updateSurfaceLines()
         }
     }
 
@@ -126,10 +139,25 @@ export class GooSimulator extends Group {
             link.a.force.addScaledVector(v1,str)
             link.b.force.addScaledVector(v1,-str)
         }
+        _deleteLinks.length = 0
+        for( let e of this.surfaceLinks ){
+            const link = e[1]
+            v1.subVectors(link.particle.position, link.point)
+            const d = v1.length()
+            v1.divideScalar(d)
+            const str = (radius-d)*stickyness
+            link.particle.force.addScaledVector(v1,str)
 
-        for( let i=0; i<this.particles.length; i++ ){
-            const p = this.particles[i]
+            if( d>breakLinkDistance ){
+                _deleteLinks.push(e[0])
+            }
+        }
+        for( let s of _deleteLinks ){
+            this.surfaceLinks.delete(s)
+        }
 
+        for( let p of this.particles ){
+            
             // collide bvh
             const info = this.bvhMesh.closestPointToPoint(p.position, hitPointInfo)
             if( info && info.distance<radius ){
@@ -137,6 +165,16 @@ export class GooSimulator extends Group {
                     v1.subVectors( p.position, info.point ).normalize(),
                     (radius-info.distance)*stiffness
                 )
+
+                // for link
+                const key = `${p.index},${info.faceIndex}`
+                if( !this.surfaceLinks.has(key) ){
+                    this.surfaceLinks.set(key,{
+                        faceIndex: info.faceIndex,
+                        point: info.point.clone(),
+                        particle: p
+                    })
+                }
             }
 
             // apply gravity
@@ -208,7 +246,7 @@ export class GooSimulator extends Group {
     }
 
     private updateLines(){
-        const g = this.linksMesh.geometry
+        const g = this.linksLine.geometry
 
         let position = g.attributes.position
         if( !position || position.count<this.particles.length ){
@@ -234,4 +272,31 @@ export class GooSimulator extends Group {
         index.needsUpdate = true
     }
 
+    private updateSurfaceLines(){
+        const g = this.surfaceLinkLine.geometry
+
+        let position = g.attributes.position
+        if( !position || position.count<this.surfaceLinks.size*2 ){
+            position = new BufferAttribute(new Float32Array(this.surfaceLinks.size*6), 3)
+            g.setAttribute("position",position)
+        }
+        let i = 0
+        for( let e of this.surfaceLinks ){
+            const l = e[1]
+            l.point.toArray( position.array, i*6 )
+            l.particle.position.toArray( position.array, i*6+3 )
+            i++
+        }
+        position.needsUpdate = true
+
+        let index = g.index
+        if( !index || index.count!=this.surfaceLinks.size*2 ){
+            index = new BufferAttribute( new Uint16Array(this.surfaceLinks.size*2), 1 )
+            for( let i=0; i<index.count; i++ ){
+                index.setX(i,i)
+            }
+            index.needsUpdate = true
+            g.setIndex(index)
+        }
+    }
 }

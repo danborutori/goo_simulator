@@ -3,10 +3,8 @@ import { GooSimulator } from "./GooSimulator.js"
 import { FpsCounter } from "./FpsCounter.js"
 import ReactDOM from "react-dom"
 import React from "react"
-import {GLTFLoader, BufferGeometryUtils} from "three/examples/jsm/Addons"
+import {GLTFLoader, BufferGeometryUtils, OrbitControls} from "three/examples/jsm/Addons"
 import { MeshBVH } from "three-mesh-bvh"
-
-const v1 = new Vector3
 
 async function createScene(){
     const loader = new GLTFLoader()
@@ -81,6 +79,13 @@ export class Application {
         this.camera.updateProjectionMatrix()
 
         window.addEventListener("resize", ()=>{ this.onResize() })
+
+        const control = new OrbitControls(this.camera, mainCanvas)
+        control.enablePan = false
+        control.enableZoom = false
+        control.maxPolarAngle = Math.PI/2        
+
+
     }
 
     start(hudRoot: HTMLDivElement){
