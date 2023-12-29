@@ -157,10 +157,12 @@ export class GooSimulator extends Group {
             // collide bvh
             const info = this.bvhMesh.closestPointToPoint(p.position, hitPointInfo)
             if( info && info.distance<radius ){
+                const d = radius-info.distance
                 p.force.addScaledVector(
                     v1.subVectors( p.position, info.point ).normalize(),
-                    (radius-info.distance)*stiffness
+                    d*stiffness
                 )
+                p.position.addScaledVector(v1,d)
 
                 // for link
                 const key = `${p.index},${info.faceIndex}`
@@ -213,10 +215,13 @@ export class GooSimulator extends Group {
                     })
                 }
                 if( d<radius*2 ){
-                    const str = (radius*2-d)*stiffness
+                    const p = radius*2-d
+                    const str = p*stiffness
                     v1.subScalar(d)
                     p1.force.addScaledVector(v1,str)
                     p2.force.addScaledVector(v1,-str)
+                    p1.position.addScaledVector(v1,p*0.5)
+                    p2.position.addScaledVector(v1,-p*0.5)
                 }
             }
         }
