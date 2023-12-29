@@ -9,6 +9,7 @@ interface Particle {
     position: Vector3
     velocity: Vector3
     force: Vector3
+    displacement: Vector3
 }
 
 interface Link {
@@ -29,7 +30,7 @@ const stiffness = 1000
 const linkStrength = 10
 const stickyness = 1.5
 const dampingFactor = 0.99
-const subStep = 3
+const subStep = 2
 const radius = 0.02
 const formLinkDistance = radius*2
 const breakLinkDistance = formLinkDistance*5
@@ -60,7 +61,8 @@ export class GooSimulator extends Group {
                 index: i,
                 position: position,
                 velocity: new Vector3(0,0,0),
-                force: new Vector3(0,0,0)
+                force: new Vector3(0,0,0),
+                displacement: new Vector3(0,0,0)
             }
         }
 
@@ -111,6 +113,7 @@ export class GooSimulator extends Group {
         // reset force
         for( let i=0; i<this.particles.length; i++ ){
             this.particles[i].force.setScalar(0)
+            this.particles[i].displacement.setScalar(0)
         }
 
         // compute force
@@ -162,7 +165,7 @@ export class GooSimulator extends Group {
                     v1.subVectors( p.position, info.point ).normalize(),
                     d*stiffness
                 )
-                p.position.addScaledVector(v1,d)
+                p.displacement.addScaledVector(v1,d)
 
                 // for link
                 const key = `${p.index},${info.faceIndex}`
@@ -188,6 +191,7 @@ export class GooSimulator extends Group {
             const p = this.particles[i]
             p.velocity.addScaledVector(p.force,deltaTime/particleMass)
             p.position.addScaledVector(p.velocity,deltaTime)
+            p.position.add(p.displacement)
         }
 
     }
@@ -220,8 +224,8 @@ export class GooSimulator extends Group {
                     v1.subScalar(d)
                     p1.force.addScaledVector(v1,str)
                     p2.force.addScaledVector(v1,-str)
-                    p1.position.addScaledVector(v1,p*0.5)
-                    p2.position.addScaledVector(v1,-p*0.5)
+                    p1.displacement.addScaledVector(v1,p*0.5)
+                    p2.displacement.addScaledVector(v1,-p*0.5)
                 }
             }
         }
