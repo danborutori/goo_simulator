@@ -58,7 +58,7 @@ export class Application {
         private camera: PerspectiveCamera
     ){
         const bvh = buildBvhMesh(scene)
-        this.gooSimulator = new GooSimulator(bvh,256,1024)
+        this.gooSimulator = new GooSimulator(bvh,1024)
         this.gooSimulator.instancedMesh.position.set(0,0.02,0)
         this.scene.add(this.gooSimulator.instancedMesh)
     }

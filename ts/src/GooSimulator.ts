@@ -1,5 +1,5 @@
 import { InstancedMesh, Matrix4, MeshBasicMaterial, SphereGeometry, Vector3 } from "three";
-import { MeshBVH } from "three-mesh-bvh";
+import { MeshBVH, HitPointInfo } from "three-mesh-bvh";
 
 const v1 = new Vector3
 const m1 = new Matrix4
@@ -11,12 +11,13 @@ interface Particle {
     links: Particle[]
 }
 
-const particleMass = 1
+const particleMass = 0.1
 const gravity = new Vector3(0,-9.8,0)
 
 const stiffness = 1000
-const dampingFactor = 0.5
-const subStep = 6
+const dampingFactor = 0.75
+const subStep = 2
+const radius = 0.02
 
 export class GooSimulator {
 
@@ -24,13 +25,10 @@ export class GooSimulator {
     readonly instancedMesh: InstancedMesh
 
     constructor(
-        bvhMesh: MeshBVH,
-        volume: number,
+        readonly bvhMesh: MeshBVH,
         particleCount: number
     ){
         this.particles = new Array(particleCount)
-
-        const radius = 0.01
 
         const width = Math.floor(Math.sqrt(particleCount))
         for( let i=0; i<particleCount; i++ ){
@@ -69,13 +67,22 @@ export class GooSimulator {
         }
 
         // compute force
+        const hitPointInfo = {
+            point: new Vector3(),
+            distance: 0,
+            faceIndex: 0
+        }
 
         for( let i=0; i<this.particles.length; i++ ){
             const p = this.particles[i]
 
-            // collide bottom plane
-            if( p.position.y<=0 ){
-                p.force.add( v1.set(0,-p.position.y*stiffness,0) )
+            // collide bvh
+            const info = this.bvhMesh.closestPointToPoint(p.position, hitPointInfo)
+            if( info && info.distance<radius ){
+                p.force.addScaledVector(
+                    v1.subVectors( p.position, info.point ).normalize(),
+                    (radius-info.distance)*stiffness
+                )
             }
 
             // apply gravity
