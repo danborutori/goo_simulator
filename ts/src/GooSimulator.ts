@@ -54,7 +54,7 @@ export class GooSimulator extends Group {
 
         const width = Math.floor(Math.sqrt(particleCount))
         for( let i=0; i<particleCount; i++ ){
-            const position = new Vector3(Math.random(),0,Math.random()).subScalar(0.5).normalize().multiplyScalar(Math.random()*radius*16)
+            const position = new Vector3(Math.random(),0,Math.random()).subScalar(0.5).normalize().multiplyScalar(Math.random()*radius*24)
             position.y = 2+i*radius*0.25 
             this.particles[i] = {
                 index: i,
