@@ -1,24 +1,22 @@
-import {Mesh, MeshBasicMaterial, PerspectiveCamera, PlaneGeometry, Scene, Vector3, WebGLRenderer} from "three"
+import {Object3D, PerspectiveCamera, Scene, Vector3, WebGLRenderer} from "three"
 import { GooSimulator } from "./GooSimulator.js"
 import { FpsCounter } from "./FpsCounter.js"
 import ReactDOM from "react-dom"
-import React, { useState } from "react"
+import React from "react"
+import {GLTFLoader} from "three/examples/jsm/Addons"
 
 const v1 = new Vector3
 
-function createScene(){
-    const scene = new Scene
+async function createScene(){
+    const loader = new GLTFLoader()
+    const gltf = await loader.loadAsync( "./asset/stage.gltf" )
+    const scene = gltf.scene
+    const camera = scene.getObjectByName("Camera") as PerspectiveCamera
 
-    const camera = new PerspectiveCamera
-    camera.position.set(0,2,-2)
-    camera.lookAt(v1.set(0,0,0))
-    scene.add(camera)
-
-    const plane = new Mesh(
-        new PlaneGeometry(1,1),
-        new MeshBasicMaterial({color:0xffffff})
-    ).rotateX(-Math.PI/2)
-    scene.add(plane)
+    scene.traverse(o=>{
+        o.castShadow = true
+        o.receiveShadow = true
+    })
 
     return {
         scene: scene,
@@ -28,17 +26,20 @@ function createScene(){
 
 export class Application {
 
-    private scene: Scene
-    private camera: PerspectiveCamera
     private renderer!: WebGLRenderer
 
     private gooSimulator: GooSimulator
 
-    constructor(){
-        const s = createScene()
-        this.scene = s.scene
-        this.camera = s.camera
+    static async create(){
+        const s = await createScene()
 
+        return new Application( s.scene, s.camera )
+    }
+
+    private constructor(
+        private scene: Object3D,
+        private camera: PerspectiveCamera
+    ){
         this.gooSimulator = new GooSimulator(256,1024)
         this.gooSimulator.instancedMesh.position.set(0,0.02,0)
         this.scene.add(this.gooSimulator.instancedMesh)
@@ -51,9 +52,10 @@ export class Application {
         mainCanvas.height = window.innerHeight        
 
         this.renderer = new WebGLRenderer({
-            canvas: mainCanvas,
+            canvas: mainCanvas,            
             antialias: true
         })
+        this.renderer.shadowMap.enabled = true
         this.renderer.setClearColor(0x0000ff)
 
         this.camera.aspect = mainCanvas.width/mainCanvas.height

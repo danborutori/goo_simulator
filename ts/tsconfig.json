@@ -19,7 +19,8 @@
     },	
     "include": [
 		"src/**/*.ts",
-		"src/**/*.tsx"
+		"src/**/*.tsx",
+		"../bower_components/three.js/examples/jsm/*.js"
 	],
 	"compileOnSave": true,
 	"buildOnSave": true
