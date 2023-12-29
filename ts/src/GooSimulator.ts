@@ -155,7 +155,7 @@ export class GooSimulator extends Group {
         for( let p of this.particles ){
             
             // collide bvh
-            const info = this.bvhMesh.closestPointToPoint(p.position, hitPointInfo)
+            const info = this.bvhMesh.closestPointToPoint(p.position, hitPointInfo, 0, radius)
             if( info && info.distance<radius ){
                 const d = radius-info.distance
                 p.force.addScaledVector(
