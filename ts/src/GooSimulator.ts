@@ -136,14 +136,14 @@ export class GooSimulator extends Group {
     }
 
     private simulate( deltaTime: number ){
-        this.updateGrid()
-        this.updateLinksAndParticleCollision()
-
         // reset force
         for( let i=0; i<this.particles.length; i++ ){
             this.particles[i].force.setScalar(0)
             this.particles[i].displacement.setScalar(0)
         }
+
+        this.updateGrid()
+        this.updateLinksAndParticleCollision()
 
         // compute force
 
@@ -285,10 +285,9 @@ export class GooSimulator extends Group {
                 this.links.set(key, newLink)
             }
             if( d<radius*2 ){
-                const p = radius*2-d
-                v1.multiplyScalar(p*0.5/d)
-                p1.displacement.add(v1)
-                p2.displacement.sub(v1)
+                v1.multiplyScalar(0.005/(d*d))
+                p1.force.add(v1)
+                p2.force.sub(v1)
             }
         }
         for( let e of _collidePair ){
