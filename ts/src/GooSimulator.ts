@@ -249,9 +249,8 @@ export class GooSimulator extends Group {
                         const index = this.gridIndexFromPosition(v1)
                         const p2 = this.grid[index]
                         if( p2 && p2!==p1 ){
-                            const key = p1.index+p2.index*this.particles.length
-                            const key2 = p2.index+p1.index*this.particles.length
-                            if( !_collidePair.has(key) && !_collidePair.has(key2) ){
+                            const key = Math.min(p1.index,p2.index)+Math.max(p1.index,p2.index)*this.particles.length
+                            if( !_collidePair.has(key) ){
                                 const pair = _pairCache.pop() || {
                                     a: p1,
                                     b: p2
@@ -273,11 +272,9 @@ export class GooSimulator extends Group {
                 p2.position
             )
             let d = v1.length()
-            const key = p1.index+p2.index*this.particles.length
-            const key2 = p2.index+p1.index*this.particles.length
+            const key = Math.min(p1.index,p2.index)+Math.max(p1.index,p2.index)*this.particles.length
             if( d<=formLinkDistance &&
-                !this.links.has(key) &&
-                !this.links.has(key2)
+                !this.links.has(key)
             ){
                 const newLink = _pairCache.pop() || {
                     a: p1,
