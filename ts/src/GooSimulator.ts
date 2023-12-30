@@ -4,15 +4,18 @@ import { MeshBVH } from "three-mesh-bvh";
 const v1 = new Vector3
 const m1 = new Matrix4
 
+const _v1 = new Vector3
+
 interface Particle {
     index: number
     position: Vector3
     velocity: Vector3
     force: Vector3
     displacement: Vector3
+    gridIndex: number
 }
 
-interface Link {
+interface ParticlePair {
     a: Particle
     b: Particle
 }
@@ -32,33 +35,39 @@ const dampingFactor = 0.99
 const radius = 0.02
 const formLinkDistance = radius*2
 const breakLinkDistance = formLinkDistance*5
-const fixedTimeStep = 1/100
+const fixedTimeStep = 1/70
 
-const _deleteLinks: string[] = []
+const gridCellSize = radius*2
+
+const _deleteLinks: number[] = []
 const _hitPointInfo = {
     point: new Vector3(),
     distance: 0,
     faceIndex: 0
 }
-const _linkCache: Link[] = []
+const _pairCache: ParticlePair[] = []
 const _surfaceLinkCache: ParticleToSurfaceLink[] = []
+const _collidePair: Map<number, ParticlePair> = new Map
 
 export class GooSimulator extends Group {
 
     private particles: Particle[]
-    private links: Map<string, Link> = new Map
-    private surfaceLinks: Map<string, ParticleToSurfaceLink> = new Map
+    private links: Map<number, ParticlePair> = new Map
+    private surfaceLinks: Map<number, ParticleToSurfaceLink> = new Map
     private instancedMesh: InstancedMesh
     private linksLine: LineSegments
     private surfaceLinkLine: LineSegments
     private deltaTime = 0
+    private grid: (Particle|null)[]
 
     constructor(
         readonly bvhMesh: MeshBVH,
-        particleCount: number
+        particleCount: number,
+        readonly gridSize: number = 400
     ){
         super()
         this.particles = new Array(particleCount)
+        this.grid = new Array(gridSize*gridSize*gridSize)
 
         const width = Math.floor(Math.sqrt(particleCount))
         for( let i=0; i<particleCount; i++ ){
@@ -69,7 +78,8 @@ export class GooSimulator extends Group {
                 position: position,
                 velocity: new Vector3(0,0,0),
                 force: new Vector3(0,0,0),
-                displacement: new Vector3(0,0,0)
+                displacement: new Vector3(0,0,0),
+                gridIndex: 0
             }
         }
 
@@ -84,9 +94,6 @@ export class GooSimulator extends Group {
         this.instancedMesh.castShadow = true
         this.instancedMesh.receiveShadow = true
         this.add(this.instancedMesh)
-        this.instancedMesh.onBeforeRender = ()=>{
-            this.updateInstanceMatrix()
-        }
 
         this.linksLine = new LineSegments( new BufferGeometry(), new LineBasicMaterial({
             color: 0x00ff00,
@@ -117,12 +124,19 @@ export class GooSimulator extends Group {
         }
 
         if( geometryNeedUpdate ){
+            this.updateInstanceMatrix()
             this.updateLines()
             this.updateSurfaceLines()
         }
     }
 
+    gridIndexFromPosition( v: Vector3 ){
+        _v1.copy(v).divideScalar(gridCellSize).floor().addScalar(this.gridSize/2).clampScalar(0,this.gridSize-1)
+        return _v1.x+_v1.y*this.gridSize+_v1.z*this.gridSize*this.gridSize
+    }
+
     private simulate( deltaTime: number ){
+        this.updateGrid()
         this.updateLinksAndParticleCollision()
 
         // reset force
@@ -177,7 +191,7 @@ export class GooSimulator extends Group {
                 p.displacement.addScaledVector(v1,d)
 
                 // for link
-                const key = `${p.index},${info.faceIndex}`
+                const key = p.index+info.faceIndex*this.particles.length
                 if( !this.surfaceLinks.has(key) ){
                     const newLink = _surfaceLinkCache.pop() || {
                         point: new Vector3,
@@ -207,39 +221,84 @@ export class GooSimulator extends Group {
 
     }
 
+    private updateGrid(){
+        for( let p of this.particles ){
+            this.grid[p.gridIndex] = null
+        }
+
+        for( let p of this.particles ){
+            const index = this.gridIndexFromPosition(p.position)
+            this.grid[index] = p
+            p.gridIndex = index
+        }
+    }
+
     private updateLinksAndParticleCollision(){
 
         // form link
         for( let i=0; i<this.particles.length; i++ ){
             const p1 = this.particles[i]
-            for( let j=i+1; j<this.particles.length; j++ ){
-                const p2 = this.particles[j]
 
-                v1.subVectors(
-                    p1.position,
-                    p2.position
-                )
-                const d = v1.length()
-                const key = `${i},${j}`
-                if( d<=formLinkDistance &&
-                    !this.links.has(key)
-                ){
-                    const newLink = _linkCache.pop() || {
-                        a: p1,
-                        b: p2
-                    }
-                    newLink.a = p1
-                    newLink.b = p2
-                    this.links.set(key, newLink)
-                }
-                if( d<radius*2 ){
-                    const p = radius*2-d
-                    v1.multiplyScalar(p*0.5/d)
-                    p1.displacement.add(v1)
-                    p2.displacement.sub(v1)
-                }
+            for( let x=0; x<=1; x++ ){
+                for( let y=0; y<=1; y++ ){
+                    for( let z=0; z<=1; z++ ){
+                        v1.copy(p1.position)
+                        v1.x += x*gridCellSize
+                        v1.y += y*gridCellSize
+                        v1.z += z*gridCellSize
+                        const index = this.gridIndexFromPosition(v1)
+                        const p2 = this.grid[index]
+                        if( p2 && p2!==p1 ){
+                            const key = p1.index+p2.index*this.particles.length
+                            const key2 = p2.index+p1.index*this.particles.length
+                            if( !_collidePair.has(key) && !_collidePair.has(key2) ){
+                                const pair = _pairCache.pop() || {
+                                    a: p1,
+                                    b: p2
+                                }
+                                pair.a = p1
+                                pair.b = p2
+                                _collidePair.set(key,pair)
+                            }
+                        }
+                    }    
+                }    
             }
         }
+        for( let e of _collidePair ){
+            const p1 = e[1].a
+            const p2 = e[1].b
+            v1.subVectors(
+                p1.position,
+                p2.position
+            )
+            let d = v1.length()
+            const key = p1.index+p2.index*this.particles.length
+            const key2 = p2.index+p1.index*this.particles.length
+            if( d<=formLinkDistance &&
+                !this.links.has(key) &&
+                !this.links.has(key2)
+            ){
+                const newLink = _pairCache.pop() || {
+                    a: p1,
+                    b: p2
+                }
+                newLink.a = p1
+                newLink.b = p2
+                this.links.set(key, newLink)
+            }
+            if( d<radius*2 ){
+                const p = radius*2-d
+                v1.multiplyScalar(p*0.5/d)
+                p1.displacement.add(v1)
+                p2.displacement.sub(v1)
+            }
+        }
+        for( let e of _collidePair ){
+            _pairCache.concat(e[1])
+        }
+        _collidePair.clear()
+
 
         // break link
         _deleteLinks.length = 0
@@ -250,7 +309,7 @@ export class GooSimulator extends Group {
             }
         }
         for(let l of _deleteLinks){
-            _linkCache.push(this.links.get(l)!)
+            _pairCache.push(this.links.get(l)!)
             this.links.delete(l)
         }
     }
