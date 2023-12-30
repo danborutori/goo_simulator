@@ -19,7 +19,6 @@ interface Link {
 
 interface ParticleToSurfaceLink {
     point: Vector3
-    faceIndex: number
     particle: Particle
 }
 
@@ -36,6 +35,13 @@ const breakLinkDistance = formLinkDistance*5
 const fixedTimeStep = 1/100
 
 const _deleteLinks: string[] = []
+const _hitPointInfo = {
+    point: new Vector3(),
+    distance: 0,
+    faceIndex: 0
+}
+const _linkCache: Link[] = []
+const _surfaceLinkCache: ParticleToSurfaceLink[] = []
 
 export class GooSimulator extends Group {
 
@@ -56,7 +62,7 @@ export class GooSimulator extends Group {
 
         const width = Math.floor(Math.sqrt(particleCount))
         for( let i=0; i<particleCount; i++ ){
-            const position = new Vector3(Math.random(),0,Math.random()).subScalar(0.5).normalize().multiplyScalar(Math.random()*radius*24)
+            const position = new Vector3(Math.random(),0,Math.random()).subScalar(0.5).normalize().multiplyScalar(Math.random()*radius*40)
             position.y = 2+i*radius*0.25 
             this.particles[i] = {
                 index: i,
@@ -126,11 +132,6 @@ export class GooSimulator extends Group {
         }
 
         // compute force
-        const hitPointInfo = {
-            point: new Vector3(),
-            distance: 0,
-            faceIndex: 0
-        }
 
         // links force
         for( let e of this.links ){
@@ -161,29 +162,30 @@ export class GooSimulator extends Group {
             }
         }
         for( let s of _deleteLinks ){
+            _surfaceLinkCache.push( this.surfaceLinks.get(s)! )
             this.surfaceLinks.delete(s)
         }
 
         for( let p of this.particles ){
             
             // collide bvh
-            const info = this.bvhMesh.closestPointToPoint(p.position, hitPointInfo, 0, radius)
+            const info = this.bvhMesh.closestPointToPoint(p.position, _hitPointInfo, 0, radius)
             if( info && info.distance<radius ){
                 const d = radius-info.distance
-                p.force.addScaledVector(
-                    v1.subVectors( p.position, info.point ).normalize(),
-                    d*stiffness
-                )
+                v1.subVectors( p.position, info.point ).divideScalar(info.distance),
+                p.force.addScaledVector(v1,d*stiffness)
                 p.displacement.addScaledVector(v1,d)
 
                 // for link
                 const key = `${p.index},${info.faceIndex}`
                 if( !this.surfaceLinks.has(key) ){
-                    this.surfaceLinks.set(key,{
-                        faceIndex: info.faceIndex,
-                        point: info.point.clone(),
+                    const newLink = _surfaceLinkCache.pop() || {
+                        point: new Vector3,
                         particle: p
-                    })
+                    }
+                    newLink.point.copy(info.point)
+                    newLink.particle = p
+                    this.surfaceLinks.set(key,newLink)
                 }
             }
 
@@ -222,10 +224,13 @@ export class GooSimulator extends Group {
                 if( d<=formLinkDistance &&
                     !this.links.has(key)
                 ){
-                    this.links.set(key, {
+                    const newLink = _linkCache.pop() || {
                         a: p1,
                         b: p2
-                    })
+                    }
+                    newLink.a = p1
+                    newLink.b = p2
+                    this.links.set(key, newLink)
                 }
                 if( d<radius*2 ){
                     const p = radius*2-d
@@ -245,6 +250,7 @@ export class GooSimulator extends Group {
             }
         }
         for(let l of _deleteLinks){
+            _linkCache.push(this.links.get(l)!)
             this.links.delete(l)
         }
     }
