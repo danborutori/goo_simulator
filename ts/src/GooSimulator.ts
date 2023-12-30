@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, Group, InstancedMesh, Line, LineBasicMaterial, LineSegments, Matrix4, MeshStandardMaterial, SphereGeometry, Vector3 } from "three";
+import { BufferAttribute, BufferGeometry, Group, InstancedMesh, LineBasicMaterial, LineSegments, Matrix4, MeshStandardMaterial, SphereGeometry, Vector3 } from "three";
 import { MeshBVH } from "three-mesh-bvh";
 
 const v1 = new Vector3
@@ -33,7 +33,7 @@ const dampingFactor = 0.99
 const radius = 0.02
 const formLinkDistance = radius*2
 const breakLinkDistance = formLinkDistance*5
-const fixedTimeStep = 1/60
+const fixedTimeStep = 1/100
 
 const _deleteLinks: string[] = []
 
@@ -102,14 +102,18 @@ export class GooSimulator extends Group {
     update( deltaTime: number ){
 
         this.deltaTime += deltaTime
+        let geometryNeedUpdate = false
 
         while( this.deltaTime>fixedTimeStep ){
             this.simulate( fixedTimeStep )
             this.deltaTime -= fixedTimeStep
+            geometryNeedUpdate = true
         }
 
-        this.updateLines()
-        this.updateSurfaceLines()
+        if( geometryNeedUpdate ){
+            this.updateLines()
+            this.updateSurfaceLines()
+        }
     }
 
     private simulate( deltaTime: number ){
@@ -225,12 +229,9 @@ export class GooSimulator extends Group {
                 }
                 if( d<radius*2 ){
                     const p = radius*2-d
-                    const str = p*stiffness
-                    v1.subScalar(d)
-                    p1.force.addScaledVector(v1,str)
-                    p2.force.addScaledVector(v1,-str)
-                    p1.displacement.addScaledVector(v1,p*0.5)
-                    p2.displacement.addScaledVector(v1,-p*0.5)
+                    v1.multiplyScalar(p*0.5/d)
+                    p1.displacement.add(v1)
+                    p2.displacement.sub(v1)
                 }
             }
         }
