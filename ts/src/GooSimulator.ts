@@ -30,10 +30,10 @@ const stiffness = 1000
 const linkStrength = 10
 const stickyness = 1.5
 const dampingFactor = 0.99
-const subStep = 2
 const radius = 0.02
 const formLinkDistance = radius*2
 const breakLinkDistance = formLinkDistance*5
+const fixedTimeStep = 1/60
 
 const _deleteLinks: string[] = []
 
@@ -45,6 +45,7 @@ export class GooSimulator extends Group {
     private instancedMesh: InstancedMesh
     private linksLine: LineSegments
     private surfaceLinkLine: LineSegments
+    private deltaTime = 0
 
     constructor(
         readonly bvhMesh: MeshBVH,
@@ -100,8 +101,12 @@ export class GooSimulator extends Group {
 
     update( deltaTime: number ){
 
-        for( let i=0; i<subStep; i++ )
-            this.simulate( deltaTime/subStep )
+        this.deltaTime += deltaTime
+
+        while( this.deltaTime>fixedTimeStep ){
+            this.simulate( fixedTimeStep )
+            this.deltaTime -= fixedTimeStep
+        }
 
         this.updateLines()
         this.updateSurfaceLines()
