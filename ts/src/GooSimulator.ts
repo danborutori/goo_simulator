@@ -295,7 +295,7 @@ export class GooSimulator extends Group {
             }
         }
         for( let e of _collidePair ){
-            _pairCache.concat(e[1])
+            _pairCache.push(e[1])
         }
         _collidePair.clear()
 
