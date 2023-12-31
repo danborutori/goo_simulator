@@ -49,10 +49,13 @@ export class Application {
         private camera: PerspectiveCamera,
         private bunny: Object3D
     ){
-        this.gooSimulator = new GooSimulator([
-            scene.getObjectByName("bunny") as Mesh,
-            scene.getObjectByName("Plane") as Mesh,
-        ],2000)
+        const meshes: Mesh[] = []
+        scene.traverse(((m: Mesh)=>{
+            if( m.isMesh ){
+                meshes.push(m)
+            }
+        }) as (o:Object3D)=>void)
+        this.gooSimulator = new GooSimulator(meshes,2000)
         this.scene.add(this.gooSimulator)
     }
 
