@@ -127,15 +127,18 @@ export class GooSimulator extends Group {
     update( deltaTime: number ){
 
         this.deltaTime += deltaTime
-        let geometryNeedUpdate = false
+        let simulationRun = false
+
+        if(this.deltaTime>fixedTimeStep)
+            this.recycleParticle()
 
         while( this.deltaTime>fixedTimeStep ){
             this.simulate( fixedTimeStep )
             this.deltaTime -= fixedTimeStep
-            geometryNeedUpdate = true
+            simulationRun = true
         }
 
-        if( geometryNeedUpdate ){
+        if( simulationRun ){
             this.updateInstanceMatrix()
             this.updateLines()
             this.updateSurfaceLines()
@@ -333,6 +336,15 @@ export class GooSimulator extends Group {
         for(let l of _deleteLinks){
             _pairCache.push(this.links.get(l)!)
             this.links.delete(l)
+        }
+    }
+
+    private recycleParticle(){
+        for( let p of this.particles ){
+            if(p.position.y<-2){
+                p.position.set(Math.random(),0,Math.random()).subScalar(0.5).normalize().multiplyScalar(Math.random()*radius*40)
+                p.position.y = 4
+            }
         }
     }
 
