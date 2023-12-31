@@ -12,7 +12,6 @@ interface Particle {
     position: Vector3
     velocity: Vector3
     force: Vector3
-    displacement: Vector3
     gridIndex: number
 }
 
@@ -31,13 +30,13 @@ const particleMass = 0.1
 const gravity = new Vector3(0,-9.8,0)
 
 const stiffness = 1000
-const linkStrength = 10
+const linkStrength = 0.5
 const stickyness = 1.5
 const dampingFactor = 0.99
 const radius = 0.02
 const formLinkDistance = radius*2
 const breakLinkDistance = formLinkDistance*5
-const fixedTimeStep = 1/70
+const fixedTimeStep = 1/60
 
 const gridCellSize = radius*2
 
@@ -83,14 +82,13 @@ export class GooSimulator extends Group {
 
         const width = Math.floor(Math.sqrt(particleCount))
         for( let i=0; i<particleCount; i++ ){
-            const position = new Vector3(Math.random(),0,Math.random()).subScalar(0.5).normalize().multiplyScalar(Math.random()*radius*40)
-            position.y = 2+i*radius*0.25 
+            const x = (i%width-width/2)*radius*2
+            const y = (Math.floor(i/width)-width/2)*radius*2
             this.particles[i] = {
                 index: i,
-                position: position,
+                position: new Vector3(x,4,y),
                 velocity: new Vector3(0,0,0),
                 force: new Vector3(0,0,0),
-                displacement: new Vector3(0,0,0),
                 gridIndex: 0
             }
         }
@@ -154,7 +152,6 @@ export class GooSimulator extends Group {
         // reset force
         for( let i=0; i<this.particles.length; i++ ){
             this.particles[i].force.setScalar(0)
-            this.particles[i].displacement.setScalar(0)
         }
 
         this.updateGrid()
@@ -163,6 +160,7 @@ export class GooSimulator extends Group {
         // compute force
 
         // links force
+        _deleteLinks.length = 0
         for( let e of this.links ){
             const link = e[1]
             v1.subVectors(
@@ -171,11 +169,19 @@ export class GooSimulator extends Group {
             )
             
             const d = v1.length()
-            v1.divideScalar(d)
-            const str = (formLinkDistance-d)*linkStrength
+            if( d<breakLinkDistance ){
+                v1.divideScalar(d)
+                const str = (formLinkDistance-d)*linkStrength
 
-            link.a.force.addScaledVector(v1,str)
-            link.b.force.addScaledVector(v1,-str)
+                link.a.force.addScaledVector(v1,str)
+                link.b.force.addScaledVector(v1,-str)
+            }else{
+                _deleteLinks.push(e[0])
+            }
+        }
+        for(let l of _deleteLinks){
+            _pairCache.push(this.links.get(l)!)
+            this.links.delete(l)
         }
         _deleteLinks.length = 0
         for( let e of this.surfaceLinks ){
@@ -183,12 +189,13 @@ export class GooSimulator extends Group {
             v2.copy(link.point).applyMatrix4(link.mesh.matrixWorld)
             v1.subVectors(link.particle.position, v2)
             const d = v1.length()
-            v1.divideScalar(d)
-            const str = (radius-d)*stickyness
-            link.particle.force.addScaledVector(v1,str)
 
             if( d>breakLinkDistance ){
                 _deleteLinks.push(e[0])
+            }else{
+                v1.divideScalar(d)
+                const str = (radius-d)*stickyness
+                link.particle.force.addScaledVector(v1,str)
             }
         }
         for( let s of _deleteLinks ){
@@ -214,7 +221,6 @@ export class GooSimulator extends Group {
                     const d = radius-info.distance
                     v1.subVectors( p.position, v2 ).divideScalar(info.distance),
                     p.force.addScaledVector(v1,d*stiffness)
-                    p.displacement.addScaledVector(v1,d)
 
                     // for link
                     const key = p.index+(i+info.faceIndex*this.colliders.length)*this.particles.length
@@ -245,7 +251,6 @@ export class GooSimulator extends Group {
             const p = this.particles[i]
             p.velocity.addScaledVector(p.force,deltaTime/particleMass)
             p.position.addScaledVector(p.velocity,deltaTime)
-            p.position.add(p.displacement)
         }
 
     }
@@ -324,26 +329,14 @@ export class GooSimulator extends Group {
         }
         _collidePair.clear()
 
-
-        // break link
-        _deleteLinks.length = 0
-        for( let e of this.links ){
-            const l = e[1]
-            if( l.a.position.distanceTo(l.b.position)>breakLinkDistance ){
-                _deleteLinks.push(e[0])
-            }
-        }
-        for(let l of _deleteLinks){
-            _pairCache.push(this.links.get(l)!)
-            this.links.delete(l)
-        }
     }
 
     private recycleParticle(){
+        let i = 0
         for( let p of this.particles ){
             if(p.position.y<-2){
-                p.position.set(Math.random(),0,Math.random()).subScalar(0.5).normalize().multiplyScalar(Math.random()*radius*40)
-                p.position.y = 4
+                p.position.set(Math.random(),0,Math.random()).subScalar(0.5).normalize().multiplyScalar(Math.random()*radius*32)
+                p.position.y = 4+(i++)*radius
             }
         }
     }
