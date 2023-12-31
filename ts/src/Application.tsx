@@ -1,10 +1,9 @@
-import {AmbientLight, BufferGeometry, Mesh, Object3D, PCFSoftShadowMap, PerspectiveCamera, WebGLRenderer} from "three"
+import {AmbientLight, Mesh, Object3D, PCFSoftShadowMap, PerspectiveCamera, WebGLRenderer} from "three"
 import { GooSimulator } from "./GooSimulator.js"
 import { FpsCounter } from "./FpsCounter.js"
 import ReactDOM from "react-dom"
 import React from "react"
-import {GLTFLoader, BufferGeometryUtils, OrbitControls} from "three/examples/jsm/Addons"
-import { MeshBVH } from "three-mesh-bvh"
+import {GLTFLoader, OrbitControls} from "three/examples/jsm/Addons"
 
 async function createScene(){
     const loader = new GLTFLoader()
@@ -25,23 +24,6 @@ async function createScene(){
     }
 }
 
-function buildBvhMesh( scene: Object3D){
-    scene.updateMatrixWorld()
-    const geometries: BufferGeometry[] = []
-
-    scene.traverse( ((m: Mesh)=>{
-        if( m.isMesh ){
-            const g = m.geometry.clone()
-            g.applyMatrix4(m.matrixWorld)
-            geometries.push(g)
-        }
-    }) as (o:Object3D)=>void)
-
-    const merged = BufferGeometryUtils.mergeGeometries(geometries)
-
-    return new MeshBVH(merged)
-}
-
 export class Application {
 
     private renderer!: WebGLRenderer
@@ -58,8 +40,10 @@ export class Application {
         private scene: Object3D,
         private camera: PerspectiveCamera
     ){
-        const bvh = buildBvhMesh(scene)
-        this.gooSimulator = new GooSimulator(bvh,2000)
+        this.gooSimulator = new GooSimulator([
+            scene.getObjectByName("bunny") as Mesh,
+            scene.getObjectByName("Plane") as Mesh,
+        ],2000)
         this.scene.add(this.gooSimulator)
     }
 

@@ -1,7 +1,8 @@
-import { BufferAttribute, BufferGeometry, Group, InstancedMesh, LineBasicMaterial, LineSegments, Matrix4, MeshStandardMaterial, SphereGeometry, Vector3 } from "three";
+import { BufferAttribute, BufferGeometry, Group, InstancedMesh, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, SphereGeometry, Vector3 } from "three";
 import { MeshBVH } from "three-mesh-bvh";
 
 const v1 = new Vector3
+const v2 = new Vector3
 const m1 = new Matrix4
 
 const _v1 = new Vector3
@@ -22,6 +23,7 @@ interface ParticlePair {
 
 interface ParticleToSurfaceLink {
     point: Vector3
+    mesh: Mesh
     particle: Particle
 }
 
@@ -59,15 +61,25 @@ export class GooSimulator extends Group {
     private surfaceLinkLine: LineSegments
     private deltaTime = 0
     private grid: (Particle|null)[]
+    private colliders: {
+        mesh: Mesh
+        bvh: MeshBVH
+    }[]
 
     constructor(
-        readonly bvhMesh: MeshBVH,
+        colliders: Mesh[],
         particleCount: number,
         readonly gridSize: number = 400
     ){
         super()
         this.particles = new Array(particleCount)
         this.grid = new Array(gridSize*gridSize*gridSize)
+        this.colliders = colliders.map( m=>{
+            return {
+                mesh: m,
+                bvh: new MeshBVH(m.geometry)
+            }
+        })
 
         const width = Math.floor(Math.sqrt(particleCount))
         for( let i=0; i<particleCount; i++ ){
@@ -165,7 +177,8 @@ export class GooSimulator extends Group {
         _deleteLinks.length = 0
         for( let e of this.surfaceLinks ){
             const link = e[1]
-            v1.subVectors(link.particle.position, link.point)
+            v2.copy(link.point).applyMatrix4(link.mesh.matrixWorld)
+            v1.subVectors(link.particle.position, v2)
             const d = v1.length()
             v1.divideScalar(d)
             const str = (radius-d)*stickyness
@@ -183,23 +196,36 @@ export class GooSimulator extends Group {
         for( let p of this.particles ){
             
             // collide bvh
-            const info = this.bvhMesh.closestPointToPoint(p.position, _hitPointInfo, 0, radius)
-            if( info && info.distance<radius ){
-                const d = radius-info.distance
-                v1.subVectors( p.position, info.point ).divideScalar(info.distance),
-                p.force.addScaledVector(v1,d*stiffness)
-                p.displacement.addScaledVector(v1,d)
+            for( let i=0; i<this.colliders.length; i++ ){
+                let collider = this.colliders[i]
+                m1.copy(collider.mesh.matrixWorld).invert()
+                const scale = m1.getMaxScaleOnAxis()
+                v1.copy(p.position).applyMatrix4(m1)
 
-                // for link
-                const key = p.index+info.faceIndex*this.particles.length
-                if( !this.surfaceLinks.has(key) ){
-                    const newLink = _surfaceLinkCache.pop() || {
-                        point: new Vector3,
-                        particle: p
+                const localSpaceRadius = radius*scale
+                const info = collider.bvh.closestPointToPoint(v1, _hitPointInfo, 0, localSpaceRadius)
+                if( info && info.distance<localSpaceRadius ){
+                    // transform to world space
+                    info.distance /= scale
+                    v2.copy(info.point).applyMatrix4(collider.mesh.matrixWorld)
+                    const d = radius-info.distance
+                    v1.subVectors( p.position, v2 ).divideScalar(info.distance),
+                    p.force.addScaledVector(v1,d*stiffness)
+                    p.displacement.addScaledVector(v1,d)
+
+                    // for link
+                    const key = p.index+(i+info.faceIndex*this.colliders.length)*this.particles.length
+                    if( !this.surfaceLinks.has(key) ){
+                        const newLink = _surfaceLinkCache.pop() || {
+                            point: new Vector3,
+                            mesh: collider.mesh,
+                            particle: p
+                        }
+                        newLink.point.copy(info.point)
+                        newLink.mesh = collider.mesh
+                        newLink.particle = p
+                        this.surfaceLinks.set(key,newLink)
                     }
-                    newLink.point.copy(info.point)
-                    newLink.particle = p
-                    this.surfaceLinks.set(key,newLink)
                 }
             }
 
@@ -356,7 +382,9 @@ export class GooSimulator extends Group {
         let i = 0
         for( let e of this.surfaceLinks ){
             const l = e[1]
-            l.point.toArray( position.array, i*6 )
+            v1.copy(l.point)
+            .applyMatrix4(l.mesh.matrixWorld)
+            .toArray( position.array, i*6 )
             l.particle.position.toArray( position.array, i*6+3 )
             i++
         }
