@@ -72,6 +72,7 @@ export class Application {
         this.renderer.shadowMap.enabled = true
         this.renderer.shadowMap.type = PCFSoftShadowMap
         this.renderer.setClearColor(0x0000ff)
+        this.renderer.setPixelRatio(window.devicePixelRatio)
 
         this.camera.aspect = mainCanvas.width/mainCanvas.height
         this.camera.updateProjectionMatrix()
