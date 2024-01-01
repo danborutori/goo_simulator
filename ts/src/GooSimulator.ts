@@ -71,7 +71,7 @@ export class GooSimulator extends Group {
     constructor(
         colliders: Mesh[],
         particleCount: number,
-        readonly gridSize: number = 400
+        readonly gridSize: number = 256
     ){
         super()
         this.particles = new Array(particleCount)
