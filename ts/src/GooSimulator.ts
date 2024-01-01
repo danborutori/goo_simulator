@@ -32,8 +32,8 @@ const particleMass = 0.1
 const gravity = new Vector3(0,-9.8,0)
 
 const stiffness = 1000
-const linkStrength = 0.5
-const stickyness = 1.5
+const linkStrength = 2
+const stickyness = 3
 const dampingFactor = 0.99
 const radius = 0.02
 const formLinkDistance = radius*2
@@ -93,7 +93,8 @@ export class GooSimulator extends Group {
                 velocity: new Vector3(0,0,0),
                 force: new Vector3(0,0,0),
                 gridIndex: 0,
-                linkCount: 0
+                linkCount: 0,
+                surfaceLinkCount: 0
             }
         }
 
