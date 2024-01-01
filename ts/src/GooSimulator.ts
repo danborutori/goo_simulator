@@ -13,6 +13,8 @@ interface Particle {
     velocity: Vector3
     force: Vector3
     gridIndex: number
+    linkCount: number
+    surfaceLinkCount: number
 }
 
 interface ParticlePair {
@@ -37,6 +39,7 @@ const radius = 0.02
 const formLinkDistance = radius*2
 const breakLinkDistance = formLinkDistance*5
 const fixedTimeStep = 1/60
+const maxLink = 4
 
 const gridCellSize = radius*2
 
@@ -89,7 +92,8 @@ export class GooSimulator extends Group {
                 position: new Vector3(x,4,y),
                 velocity: new Vector3(0,0,0),
                 force: new Vector3(0,0,0),
-                gridIndex: 0
+                gridIndex: 0,
+                linkCount: 0
             }
         }
 
@@ -180,7 +184,10 @@ export class GooSimulator extends Group {
             }
         }
         for(let l of _deleteLinks){
-            _pairCache.push(this.links.get(l)!)
+            const lnk = this.links.get(l)!
+            lnk.a.linkCount--
+            lnk.b.linkCount--
+            _pairCache.push(lnk)
             this.links.delete(l)
         }
         _deleteLinks.length = 0
@@ -199,7 +206,9 @@ export class GooSimulator extends Group {
             }
         }
         for( let s of _deleteLinks ){
-            _surfaceLinkCache.push( this.surfaceLinks.get(s)! )
+            const l = this.surfaceLinks.get(s)!
+            l.particle.surfaceLinkCount--
+            _surfaceLinkCache.push( l )
             this.surfaceLinks.delete(s)
         }
 
@@ -224,7 +233,7 @@ export class GooSimulator extends Group {
 
                     // for link
                     const key = p.index+(i+info.faceIndex*this.colliders.length)*this.particles.length
-                    if( !this.surfaceLinks.has(key) ){
+                    if( p.surfaceLinkCount<maxLink && !this.surfaceLinks.has(key) ){
                         const newLink = _surfaceLinkCache.pop() || {
                             point: new Vector3,
                             mesh: collider.mesh,
@@ -233,6 +242,7 @@ export class GooSimulator extends Group {
                         newLink.point.copy(info.point)
                         newLink.mesh = collider.mesh
                         newLink.particle = p
+                        p.surfaceLinkCount++
                         this.surfaceLinks.set(key,newLink)
                     }
                 }
@@ -308,6 +318,8 @@ export class GooSimulator extends Group {
             let d = v1.length()
             const key = Math.min(p1.index,p2.index)+Math.max(p1.index,p2.index)*this.particles.length
             if( d<=formLinkDistance &&
+                p1.linkCount<maxLink &&
+                p2.linkCount<maxLink &&
                 !this.links.has(key)
             ){
                 const newLink = _pairCache.pop() || {
@@ -316,6 +328,8 @@ export class GooSimulator extends Group {
                 }
                 newLink.a = p1
                 newLink.b = p2
+                newLink.a.linkCount++
+                newLink.b.linkCount++
                 this.links.set(key, newLink)
             }
             if( d<radius*2 ){
