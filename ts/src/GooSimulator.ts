@@ -119,7 +119,7 @@ export class GooSimulator extends Group {
         this.add(this.linksLine)
 
         this.surfaceLinkLine = new LineSegments( new BufferGeometry(), new LineBasicMaterial({
-            color: 0x0000ff
+            color: 0xffff00
         }))
         this.surfaceLinkLine.frustumCulled = false
         this.surfaceLinkLine.castShadow = true
