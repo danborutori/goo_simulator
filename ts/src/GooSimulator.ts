@@ -1,5 +1,5 @@
-import { BufferAttribute, BufferGeometry, Group, InstancedMesh, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, SphereGeometry, Vector3 } from "three";
-import { MeshBVH } from "three-mesh-bvh";
+import { BufferAttribute, BufferGeometry, Group, InstancedMesh, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, SphereGeometry, Vector2, Vector3 } from "three";
+import { HitTriangleInfo, MeshBVH, getTriangleHitPointInfo } from "three-mesh-bvh";
 
 const v1 = new Vector3
 const v2 = new Vector3
@@ -31,7 +31,7 @@ interface ParticleToSurfaceLink {
 const particleMass = 0.1
 const gravity = new Vector3(0,-9.8,0)
 
-const stiffness = 1000
+const stiffness = 250
 const linkStrength = 2
 const stickyness = 3
 const dampingFactor = 0.99
@@ -48,6 +48,16 @@ const _hitPointInfo = {
     point: new Vector3(),
     distance: 0,
     faceIndex: 0
+}
+const _hitTriangleInfo: HitTriangleInfo = {
+    face: {
+        a: 0,
+        b: 0,
+        c: 0,
+        materialIndex: 0,
+        normal: new Vector3
+    },
+    uv: new Vector2
 }
 const _pairCache: ParticlePair[] = []
 const _surfaceLinkCache: ParticleToSurfaceLink[] = []
@@ -222,14 +232,23 @@ export class GooSimulator extends Group {
                 const scale = m1.getMaxScaleOnAxis()
                 v1.copy(p.position).applyMatrix4(m1)
 
-                const localSpaceRadius = radius*scale
+                const localSpaceRadius = radius*scale                
                 const info = collider.bvh.closestPointToPoint(v1, _hitPointInfo, 0, localSpaceRadius)
+                if( info ){
+                    getTriangleHitPointInfo(
+                        info.point,
+                        collider.bvh.geometry,
+                        info.faceIndex,
+                        _hitTriangleInfo
+                    )
+                    info.distance *= Math.sign(v2.subVectors(v1,info.point).dot(_hitTriangleInfo.face.normal))
+                }
                 if( info && info.distance<localSpaceRadius ){
                     // transform to world space
                     info.distance /= scale
                     v2.copy(info.point).applyMatrix4(collider.mesh.matrixWorld)
                     const d = radius-info.distance
-                    v1.subVectors( p.position, v2 ).divideScalar(info.distance),
+                    v1.subVectors( p.position, v2 ).divideScalar(Math.abs(info.distance)),
                     p.force.addScaledVector(v1,d*stiffness)
 
                     // for link

@@ -55,7 +55,7 @@ export class Application {
                 meshes.push(m)
             }
         }) as (o:Object3D)=>void)
-        this.gooSimulator = new GooSimulator(meshes,2000)
+        this.gooSimulator = new GooSimulator(meshes,4096)
         this.scene.add(this.gooSimulator)
     }
 
