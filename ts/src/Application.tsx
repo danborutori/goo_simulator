@@ -13,7 +13,7 @@ async function createScene(){
     const gltf = await loader.loadAsync( "./asset/stage.gltf" )
     const scene = gltf.scene
     const camera = scene.getObjectByName("Camera") as PerspectiveCamera
-    const bunny = scene.getObjectByName("bunny")!
+    const dragon = scene.getObjectByName("dragon")!
 
     scene.traverse(o=>{
         o.castShadow = true
@@ -25,7 +25,7 @@ async function createScene(){
     return {
         scene: scene,
         camera: camera,
-        bunny: bunny
+        bunny: dragon
     }
 }
 
@@ -138,7 +138,7 @@ export class Application {
 
     private update( deltaTime: number ){
 
-        this.bunny.quaternion.multiply(q1.setFromAxisAngle(v1.set(0,0,1), Math.PI*deltaTime*this.bunnyRotDir))
+        this.bunny.quaternion.multiply(q1.setFromAxisAngle(v1.set(0,1,0), Math.PI*deltaTime*this.bunnyRotDir))
         this.gooSimulator.update(deltaTime)
 
     }
