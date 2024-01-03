@@ -11,7 +11,7 @@ function modify( material: Material, uniforms: {
 ){
     const defines = material.defines || (material.defines = {})
     defines.MARCHING_MATERIAL = "1"
-    defines.MARCHING_STEP = 200
+    defines.MARCHING_STEP = 100
 
     material.onBeforeCompile = shader=>{
 
@@ -199,7 +199,7 @@ export class MarchingMaterial extends MeshStandardMaterial {
         sdfTexture: Texture
     ){
         super({
-            color: 0xD3D3D3,
+            color: 0x00FF00,
             roughness: 0,
             depthTest: true,
             depthWrite: true,

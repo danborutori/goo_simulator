@@ -200,12 +200,26 @@ export class GooSimulator extends Group {
             this.updateInstanceMatrix()
             this.updateLines()
             this.updateSurfaceLines()
+            const lineSegments: { a: Vector3, b: Vector3 }[] = []
+            for( let l of this.links ){
+                lineSegments.push({
+                    a: l[1].a.position,
+                    b: l[1].b.position
+                })
+            }
+            for( let l of this.surfaceLinks ){
+                lineSegments.push({
+                    a: l[1].particle.position,
+                    b: l[1].point.clone().applyMatrix4(l[1].mesh.matrixWorld)
+                })
+            }
             sdfGenerator.generate(
                 renderer,
                 this.sdfRendertarget,
                 this.gridSize,
                 gridCellSize,
                 this.particles,
+                lineSegments,
                 radius
             )
         }
