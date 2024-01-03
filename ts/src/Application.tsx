@@ -66,7 +66,7 @@ export class Application {
         mainCanvas.height = window.innerHeight        
 
         this.renderer = new WebGLRenderer({
-            canvas: mainCanvas,            
+            canvas: mainCanvas,
             antialias: true
         })
         this.renderer.shadowMap.enabled = true
@@ -139,7 +139,7 @@ export class Application {
     private update( deltaTime: number ){
 
         this.bunny.quaternion.multiply(q1.setFromAxisAngle(v1.set(0,1,0), Math.PI*deltaTime*this.bunnyRotDir))
-        this.gooSimulator.update(deltaTime)
+        this.gooSimulator.update(deltaTime,this.renderer)
 
     }
 

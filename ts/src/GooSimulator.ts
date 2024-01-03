@@ -1,5 +1,7 @@
-import { BufferAttribute, BufferGeometry, Group, InstancedMesh, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, SphereGeometry, Vector2, Vector3 } from "three";
+import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, FloatType, Group, InstancedMesh, LineBasicMaterial, LineSegments, MathUtils, Matrix4, Mesh, MeshStandardMaterial, NearestFilter, PlaneGeometry, RedFormat, SphereGeometry, Vector2, Vector3, WebGLRenderTarget, WebGLRenderer } from "three";
 import { HitTriangleInfo, MeshBVH, getTriangleHitPointInfo } from "three-mesh-bvh";
+import { SDFGenerator } from "./SDFGenerator.js";
+import { MarchingMaterial } from "./MarchingMaterial.js";
 
 const v1 = new Vector3
 const v2 = new Vector3
@@ -63,6 +65,8 @@ const _pairCache: ParticlePair[] = []
 const _surfaceLinkCache: ParticleToSurfaceLink[] = []
 const _collidePair: Map<number, ParticlePair> = new Map
 
+const sdfGenerator = new SDFGenerator
+
 export class GooSimulator extends Group {
 
     private particles: Particle[]
@@ -71,12 +75,15 @@ export class GooSimulator extends Group {
     private instancedMesh: InstancedMesh
     private linksLine: LineSegments
     private surfaceLinkLine: LineSegments
+    private marchingMesh: Mesh
     private deltaTime = 0
     private grid: (Particle|null)[]
     private colliders: {
         mesh: Mesh
         bvh: MeshBVH
     }[]
+
+    private sdfRendertarget: WebGLRenderTarget
 
     constructor(
         colliders: Mesh[],
@@ -91,6 +98,16 @@ export class GooSimulator extends Group {
                 mesh: m,
                 bvh: new MeshBVH(m.geometry)
             }
+        })
+        const sdfRenderTargetWidth = MathUtils.ceilPowerOfTwo(Math.floor(Math.pow(gridSize,3/2)))
+        this.sdfRendertarget = new WebGLRenderTarget(sdfRenderTargetWidth,sdfRenderTargetWidth, {
+            format: RedFormat,
+            type: FloatType,
+            minFilter: NearestFilter,
+            magFilter: NearestFilter,
+            generateMipmaps: false,
+            wrapS: ClampToEdgeWrapping,
+            wrapT: ClampToEdgeWrapping
         })
 
         const width = Math.floor(Math.sqrt(particleCount))
@@ -135,9 +152,24 @@ export class GooSimulator extends Group {
         this.surfaceLinkLine.castShadow = true
         this.surfaceLinkLine.receiveShadow = false
         this.add(this.surfaceLinkLine)
+
+        const marchingMaterial = new MarchingMaterial(this.sdfRendertarget.texture)
+        marchingMaterial.uniforms.gridSize.value = gridSize
+        marchingMaterial.uniforms.gridCellSize.value = gridCellSize
+        this.marchingMesh = new Mesh( new PlaneGeometry(2,2), marchingMaterial)
+        this.marchingMesh.frustumCulled = false
+        this.marchingMesh.onBeforeRender = (renderer,_,camera)=>{
+            renderer.getDrawingBufferSize(marchingMaterial.uniforms.resolution.value)
+            marchingMaterial.uniforms.screenToWorldMatrix.value.multiplyMatrices(
+                camera.matrixWorld,
+                camera.projectionMatrixInverse
+            )
+            // marchingMaterial.uniforms.screenToWorldMatrix.value.copy(camera.projectionMatrix).invert().premultiply(camera.matrixWorld)
+        }
+        this.add(this.marchingMesh)
     }
 
-    update( deltaTime: number ){
+    update( deltaTime: number, renderer: WebGLRenderer ){
 
         this.deltaTime += deltaTime
         let simulationRun = false
@@ -155,6 +187,14 @@ export class GooSimulator extends Group {
             this.updateInstanceMatrix()
             this.updateLines()
             this.updateSurfaceLines()
+            sdfGenerator.generate(
+                renderer,
+                this.sdfRendertarget,
+                this.gridSize,
+                gridCellSize,
+                this.particles,
+                radius
+            )
         }
     }
 
