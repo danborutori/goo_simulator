@@ -125,6 +125,10 @@ export class GooSimulator extends Group {
             }
         }
 
+        const group = new Group()
+        group.visible = false
+        this.add( group )
+
         this.instancedMesh = new InstancedMesh(
             new SphereGeometry(radius),
             new MeshStandardMaterial({
@@ -135,7 +139,7 @@ export class GooSimulator extends Group {
         this.instancedMesh.frustumCulled = false
         this.instancedMesh.castShadow = true
         this.instancedMesh.receiveShadow = true
-        this.add(this.instancedMesh)
+        group.add(this.instancedMesh)
 
         this.linksLine = new LineSegments( new BufferGeometry(), new LineBasicMaterial({
             color: 0x00ff00,
@@ -143,7 +147,7 @@ export class GooSimulator extends Group {
         this.linksLine.frustumCulled = false
         this.linksLine.castShadow = true
         this.linksLine.receiveShadow = false
-        this.add(this.linksLine)
+        group.add(this.linksLine)
 
         this.surfaceLinkLine = new LineSegments( new BufferGeometry(), new LineBasicMaterial({
             color: 0xffff00
@@ -151,7 +155,7 @@ export class GooSimulator extends Group {
         this.surfaceLinkLine.frustumCulled = false
         this.surfaceLinkLine.castShadow = true
         this.surfaceLinkLine.receiveShadow = false
-        this.add(this.surfaceLinkLine)
+        group.add(this.surfaceLinkLine)
 
         const marchingMaterial = new MarchingMaterial(this.sdfRendertarget.texture)
         marchingMaterial.uniforms.gridSize.value = gridSize
@@ -160,10 +164,8 @@ export class GooSimulator extends Group {
         this.marchingMesh.frustumCulled = false
         this.marchingMesh.onBeforeRender = (renderer,_,camera)=>{
             renderer.getDrawingBufferSize(marchingMaterial.uniforms.resolution.value)
-            marchingMaterial.uniforms.screenToWorldMatrix.value.multiplyMatrices(
-                camera.matrixWorld,
-                camera.projectionMatrixInverse
-            )
+            marchingMaterial.uniforms.cameraProjectionMatrixInverse.value.copy(camera.projectionMatrixInverse)
+            marchingMaterial.uniforms.cameraWorldMatrix.value.copy(camera.matrixWorld)
         }
         this.add(this.marchingMesh)
     }
