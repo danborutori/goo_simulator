@@ -160,13 +160,25 @@ export class GooSimulator extends Group {
         const marchingMaterial = new MarchingMaterial(this.sdfRendertarget.texture)
         marchingMaterial.uniforms.gridSize.value = gridSize
         marchingMaterial.uniforms.gridCellSize.value = gridCellSize
+        // const marchingDepthMaterial = new MarchingDepthMaterial(this.sdfRendertarget.texture)
+        // marchingDepthMaterial.depthPacking = RGBADepthPacking
+        // marchingDepthMaterial.uniforms.gridSize.value = gridSize
+        // marchingDepthMaterial.uniforms.gridCellSize.value = gridCellSize
         this.marchingMesh = new Mesh( new PlaneGeometry(2,2), marchingMaterial)
+        // this.marchingMesh.customDepthMaterial = this.marchingMesh.customDistanceMaterial = marchingDepthMaterial
+        this.marchingMesh.castShadow = false
+        this.marchingMesh.receiveShadow = false
         this.marchingMesh.frustumCulled = false
         this.marchingMesh.onBeforeRender = (renderer,_,camera)=>{
             renderer.getDrawingBufferSize(marchingMaterial.uniforms.resolution.value)
             marchingMaterial.uniforms.cameraProjectionMatrixInverse.value.copy(camera.projectionMatrixInverse)
             marchingMaterial.uniforms.cameraWorldMatrix.value.copy(camera.matrixWorld)
         }
+        // this.marchingMesh.onBeforeShadow = (_,__,shadowCamera)=>{
+        //     marchingDepthMaterial.uniforms.resolution.value.setScalar(1024)
+        //     marchingDepthMaterial.uniforms.cameraProjectionMatrixInverse.value.copy(shadowCamera.projectionMatrixInverse)
+        //     marchingDepthMaterial.uniforms.cameraWorldMatrix.value.copy(shadowCamera.matrixWorld)
+        // }
         this.add(this.marchingMesh)
     }
 

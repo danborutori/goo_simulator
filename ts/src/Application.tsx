@@ -1,4 +1,4 @@
-import {AmbientLight, Mesh, Object3D, PCFSoftShadowMap, PerspectiveCamera, Quaternion, Vector3, WebGLRenderer} from "three"
+import {AmbientLight, Mesh, Object3D, PCFShadowMap, PerspectiveCamera, Quaternion, SpotLight, Vector3, WebGLRenderer} from "three"
 import { GooSimulator } from "./GooSimulator.js"
 import { FpsCounter } from "./FpsCounter.js"
 import ReactDOM from "react-dom"
@@ -18,6 +18,13 @@ async function createScene(){
     scene.traverse(o=>{
         o.castShadow = true
         o.receiveShadow = true
+        const lit = o as SpotLight
+        if( lit.isSpotLight ){
+            lit.shadow.mapSize.setScalar(1024)
+            lit.shadow.camera.near = 3.65
+            lit.shadow.camera.far = 8.51
+            lit.shadow.camera.updateProjectionMatrix()
+        }
     })
 
     scene.add(new AmbientLight(0x404040))
@@ -70,7 +77,7 @@ export class Application {
             antialias: true
         })
         this.renderer.shadowMap.enabled = true
-        this.renderer.shadowMap.type = PCFSoftShadowMap
+        this.renderer.shadowMap.type = PCFShadowMap
         this.renderer.setClearColor(0x6A81B4)
         this.renderer.setPixelRatio(window.devicePixelRatio)
 
