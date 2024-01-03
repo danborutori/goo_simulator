@@ -54,8 +54,8 @@ function modify( material: Material, uniforms: {
                 255.0,127.0,223.0,95.0,251.0,119.0,215.0,87.0,253.0,125.0,221.0,93.0,249.0,117.0,213.0,85.0
             );
             float getDither(){
-                vec2 v = mod(gl_FragCoord.xy,16.0);
-                return ditherMatrix16x16[int(v.x+v.y*16.0)]/256.0;
+                vec2 v = mod(floor(gl_FragCoord.xy),16.0);
+                return ditherMatrix16x16[int(v.x+v.y*16.0)]/255.0;
             }
 
             float sampleDepth( vec3 wPos ){
