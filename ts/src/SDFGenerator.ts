@@ -13,13 +13,15 @@ class SDFMaterial extends ShaderMaterial {
                 radius: { value: 1 },
                 gridSize: { value: 1 },
                 gridCellSize: { value: 1 },
-                rendertargetSize: { value: 1 }
+                rendertargetSize: { value: 1 },
+                maxDistance: { value: 1 }
             },
             vertexShader: `
             uniform float radius;
             uniform float gridSize;
             uniform float gridCellSize;
             uniform float rendertargetSize;
+            uniform float maxDistance;
 
             varying float vDistance;
 
@@ -33,7 +35,7 @@ class SDFMaterial extends ShaderMaterial {
                     gridSize-1.0
                 );
                 vec3 gridWPos = (gridPos-gridSize/2.0)*gridCellSize;
-                vDistance = distance(gridWPos,origin.xyz)-radius;
+                vDistance = min(maxDistance,distance(gridWPos,origin.xyz)-radius);
                 
                 float gridId = gridPos.x+(gridPos.y+gridPos.z*gridSize)*gridSize;
                 gl_Position = vec4(
@@ -56,13 +58,10 @@ class SDFMaterial extends ShaderMaterial {
             depthTest: false,
             depthWrite: false,
             transparent: true,
-            blending: CustomBlending,            
+            blending: CustomBlending,
             blendSrc: OneFactor,
             blendDst: OneFactor,
-            blendColor: MinEquation,
-            blendSrcAlpha: OneFactor,
-            blendDstAlpha: OneFactor,
-            blendAlpha: MinEquation
+            blendEquation: MinEquation
         })
     }
 }
@@ -71,7 +70,7 @@ class SDFMaterial extends ShaderMaterial {
 const scene = new Scene
 const camera = new PerspectiveCamera()
 const sdfMaterial = new SDFMaterial
-const pointCubeSize = 5
+const pointCubeSize = 8
 const pointGeometry = (function(){
     const g = new BufferGeometry()
     const position = new BufferAttribute( new Float32Array(pointCubeSize*pointCubeSize*pointCubeSize*3), 3)
@@ -127,10 +126,13 @@ export class SDFGenerator {
         spherePositions: {position: Vector3}[],
         radius: number
     ){
+        const maxDistance = pointCubeSize*cellSize/2
+
         sdfMaterial.uniforms.radius.value = radius
         sdfMaterial.uniforms.gridSize.value = gridSize
         sdfMaterial.uniforms.gridCellSize.value = cellSize
         sdfMaterial.uniforms.rendertargetSize.value = target.width
+        sdfMaterial.uniforms.maxDistance.value = maxDistance
         setupScene( spherePositions, cellSize )
 
         const restore = {
@@ -140,7 +142,6 @@ export class SDFGenerator {
             activeMipLevel: renderer.getActiveMipmapLevel()
         }
 
-        const maxDistance = pointCubeSize*cellSize/2
         renderer.setClearColor(c1.set(maxDistance,0,0))
 
         renderer.setRenderTarget( target )

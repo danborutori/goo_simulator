@@ -164,7 +164,6 @@ export class GooSimulator extends Group {
                 camera.matrixWorld,
                 camera.projectionMatrixInverse
             )
-            // marchingMaterial.uniforms.screenToWorldMatrix.value.copy(camera.projectionMatrix).invert().premultiply(camera.matrixWorld)
         }
         this.add(this.marchingMesh)
     }
