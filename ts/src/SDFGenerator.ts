@@ -194,7 +194,7 @@ segments.frustumCulled = false
 
 scene.add(camera)
 scene.add(points)
-// scene.add(segments)
+scene.add(segments)
 
 function setupScene(
     spherePositions: {position: Vector3}[],
