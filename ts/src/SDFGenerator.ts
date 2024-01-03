@@ -217,7 +217,7 @@ function setupScene(
 
     // update line segments
     if( segments.instanceMatrix.count<lineSegments.length ){
-        segments.instanceMatrix = new InstancedBufferAttribute( new Float32Array(16*spherePositions.length), 16)
+        segments.instanceMatrix = new InstancedBufferAttribute( new Float32Array(16*lineSegments.length), 16)
     }
     let segmentA = segments.geometry.attributes.segmentA
     let segmentB = segments.geometry.attributes.segmentB
@@ -264,7 +264,7 @@ export class SDFGenerator {
         sphereSdfMaterial.uniforms.gridCellSize.value = cellSize
         sphereSdfMaterial.uniforms.rendertargetSize.value = target.width
         sphereSdfMaterial.uniforms.maxDistance.value = maxDistance        
-        linesegmentSdfMaterial.uniforms.radius.value = radius
+        linesegmentSdfMaterial.uniforms.radius.value = radius*0.25
         linesegmentSdfMaterial.uniforms.gridSize.value = gridSize
         linesegmentSdfMaterial.uniforms.gridCellSize.value = cellSize
         linesegmentSdfMaterial.uniforms.rendertargetSize.value = target.width

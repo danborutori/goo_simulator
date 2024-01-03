@@ -64,6 +64,9 @@ const _hitTriangleInfo: HitTriangleInfo = {
 const _pairCache: ParticlePair[] = []
 const _surfaceLinkCache: ParticleToSurfaceLink[] = []
 const _collidePair: Map<number, ParticlePair> = new Map
+const _lineSegments: { a: Vector3, b: Vector3 }[] = []
+const _vectorPairCache: { a: Vector3, b: Vector3 }[] = []
+
 
 const sdfGenerator = new SDFGenerator
 
@@ -200,18 +203,17 @@ export class GooSimulator extends Group {
             this.updateInstanceMatrix()
             this.updateLines()
             this.updateSurfaceLines()
-            const lineSegments: { a: Vector3, b: Vector3 }[] = []
             for( let l of this.links ){
-                lineSegments.push({
-                    a: l[1].a.position,
-                    b: l[1].b.position
-                })
+                const pair = _vectorPairCache.pop() || {a: new Vector3, b: new Vector3}
+                pair.a.copy(l[1].a.position)
+                pair.b.copy(l[1].b.position)
+                _lineSegments.push( pair )
             }
             for( let l of this.surfaceLinks ){
-                lineSegments.push({
-                    a: l[1].particle.position,
-                    b: l[1].point.clone().applyMatrix4(l[1].mesh.matrixWorld)
-                })
+                const pair = _vectorPairCache.pop() || {a: new Vector3, b: new Vector3}
+                pair.a.copy( l[1].particle.position )
+                pair.b.copy(l[1].point).applyMatrix4(l[1].mesh.matrixWorld)
+                _lineSegments.push( pair )
             }
             sdfGenerator.generate(
                 renderer,
@@ -219,9 +221,12 @@ export class GooSimulator extends Group {
                 this.gridSize,
                 gridCellSize,
                 this.particles,
-                lineSegments,
+                _lineSegments,
                 radius
             )
+            for( let p of _lineSegments )
+                _vectorPairCache.push(p)
+            _lineSegments.length = 0
         }
     }
 
