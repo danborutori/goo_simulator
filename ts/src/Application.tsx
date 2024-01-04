@@ -4,6 +4,7 @@ import { FpsCounter } from "./FpsCounter.js"
 import ReactDOM from "react-dom"
 import React from "react"
 import {GLTFLoader, OrbitControls} from "three/examples/jsm/Addons"
+// import { ShadowMapDebugger } from "./ShadowMapDebugger.js"
 
 const v1 = new Vector3
 const q1 = new Quaternion
@@ -83,6 +84,13 @@ export class Application {
 
         this.camera.aspect = mainCanvas.width/mainCanvas.height
         this.camera.updateProjectionMatrix()
+
+        // const shadowDebugger = new ShadowMapDebugger(
+        //     (this.scene.getObjectByName("Light") as SpotLight).shadow
+        // )
+        // this.camera.add( shadowDebugger )
+        // shadowDebugger.position.set(0.2,0.2,-this.camera.near)
+        // shadowDebugger.scale.setScalar(0.2)
 
         const controls = new OrbitControls(this.camera, mainCanvas)
         controls.enablePan = false

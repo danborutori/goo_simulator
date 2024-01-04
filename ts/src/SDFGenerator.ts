@@ -141,7 +141,7 @@ class LineSegmentSDFMaterial extends ShaderMaterial {
 const scene = new Scene
 const camera = new PerspectiveCamera()
 const sphereSdfMaterial = new SphereSDFMaterial
-const pointCubeSize = 8
+const pointCubeSize = 4
 const pointGeometry = (function(){
     const g = new BufferGeometry()
     const position = new BufferAttribute( new Float32Array(pointCubeSize*pointCubeSize*pointCubeSize*3), 3)
@@ -166,7 +166,7 @@ const points = new InstancedMesh(pointGeometry, sphereSdfMaterial, 1)
 ;(points as any).isPoints = true
 points.frustumCulled = false
 
-const lineCubeSize = 10
+const lineCubeSize = 8
 const linesegmentSdfMaterial = new LineSegmentSDFMaterial()
 const segmentsGeometry = (function(){
     const g = new BufferGeometry()

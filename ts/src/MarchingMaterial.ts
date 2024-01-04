@@ -1,9 +1,7 @@
-import { Texture, FrontSide, Matrix4, Vector2, MeshStandardMaterial, Material, MeshDepthMaterial } from "three";
+import { Texture, FrontSide, Vector2, MeshStandardMaterial, Material, MeshDepthMaterial } from "three";
 
 function modify( material: Material, uniforms: {
         resolution: { value: Vector2 }
-        cameraProjectionMatrixInverse: { value: Matrix4 }
-        cameraWorldMatrix: { value: Matrix4 }
         gridSize: { value: number }
         gridCellSize: { value: number }
     },
@@ -31,8 +29,6 @@ function modify( material: Material, uniforms: {
             uniform sampler2D tSDF;
             uniform float gridSize;
             uniform float gridCellSize;
-            uniform mat4 cameraProjectionMatrixInverse;
-            uniform mat4 cameraWorldMatrix;
             uniform mat4 projectionMatrix;
 
             const float ditherMatrix16x16[256] = float[](
@@ -127,6 +123,8 @@ function modify( material: Material, uniforms: {
             `
             void main() {
 
+            mat4 cameraProjectionMatrixInverse = inverse(projectionMatrix);
+            mat4 cameraWorldMatrix = inverse(viewMatrix);
             vec4 vPos = cameraProjectionMatrixInverse*vec4( gl_FragCoord.xy/resolution*2.0-1.0,0,1 );
             vPos /= vPos.w;
             vec3 vDir = normalize(vPos.xyz);
@@ -189,8 +187,6 @@ function modify( material: Material, uniforms: {
 export class MarchingMaterial extends MeshStandardMaterial {
     readonly uniforms = {
         resolution: { value: new Vector2 },
-        cameraProjectionMatrixInverse: { value: new Matrix4 },
-        cameraWorldMatrix: { value: new Matrix4 },
         gridSize: { value: 0 },
         gridCellSize: { value: 0 }
     }
@@ -200,10 +196,10 @@ export class MarchingMaterial extends MeshStandardMaterial {
     ){
         super({
             color: 0x00FF00,
-            roughness: 0,
             depthTest: true,
             depthWrite: true,
-            side: FrontSide
+            side: FrontSide,
+            shadowSide: FrontSide
         })
 
         modify( this, this.uniforms, sdfTexture )
@@ -213,8 +209,6 @@ export class MarchingMaterial extends MeshStandardMaterial {
 export class MarchingDepthMaterial extends MeshDepthMaterial {
     readonly uniforms = {
         resolution: { value: new Vector2 },
-        cameraProjectionMatrixInverse: { value: new Matrix4 },
-        cameraWorldMatrix: { value: new Matrix4 },
         gridSize: { value: 0 },
         gridCellSize: { value: 0 }
     }
