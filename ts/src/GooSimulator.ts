@@ -170,7 +170,7 @@ export class GooSimulator extends Group {
         this.marchingMesh = new Mesh( new PlaneGeometry(2,2), marchingMaterial)        
         this.marchingMesh.customDepthMaterial = this.marchingMesh.customDistanceMaterial = marchingDepthMaterial
         this.marchingMesh.castShadow = true
-        this.marchingMesh.receiveShadow = false
+        this.marchingMesh.receiveShadow = true
         this.marchingMesh.frustumCulled = false
         this.marchingMesh.onBeforeRender = renderer=>{
             renderer.getDrawingBufferSize(marchingMaterial.uniforms.resolution.value)

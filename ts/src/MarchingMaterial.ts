@@ -118,6 +118,12 @@ function modify( material: Material, uniforms: {
                 return distance;
             }
 
+            #if NUM_SPOT_LIGHT_COORDS > 0
+
+                uniform mat4 spotLightMatrix[ NUM_SPOT_LIGHT_COORDS ];
+
+            #endif
+
         `+shader.fragmentShader.replace(
             "void main() {",
             `
@@ -179,6 +185,21 @@ function modify( material: Material, uniforms: {
             "float fragCoordZ = 0.5 * vHighPrecisionZW[0] / vHighPrecisionZW[1] + 0.5;",
             `
             float fragCoordZ = finalSPos.z*0.5+0.5;
+            `
+        ).replace(
+            "#include <lights_fragment_begin>",
+            `
+            #ifdef USE_SHADOWMAP
+            #if NUM_SPOT_LIGHT_COORDS > 0
+            vec4 vSpotLightCoord[ NUM_SPOT_LIGHT_COORDS ];
+
+            for( int i=0; i<NUM_SPOT_LIGHT_COORDS; i++ ){
+                vSpotLightCoord[ i ] = spotLightMatrix[ i ]*vec4(curWPos,1);
+            }
+            #endif
+            #endif
+
+            #include <lights_fragment_begin>
             `
         )
     }
