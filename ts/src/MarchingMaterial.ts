@@ -184,7 +184,8 @@ function modify( material: Material, uniforms: {
         ).replace(
             "float fragCoordZ = 0.5 * vHighPrecisionZW[0] / vHighPrecisionZW[1] + 0.5;",
             `
-            float fragCoordZ = finalSPos.z*0.5+0.5;
+            float shadowBias = 0.01;
+            float fragCoordZ = (finalSPos.z+shadowBias)*0.5+0.5;
             `
         ).replace(
             "#include <lights_fragment_begin>",
