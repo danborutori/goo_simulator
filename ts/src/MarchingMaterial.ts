@@ -160,6 +160,7 @@ function modify( material: Material, uniforms: {
             if( !hit ) discard;
             
             gl_FragDepth = finalSPos.z*0.5+0.5;
+            vec3 vViewPosition = curVPos*vec3(1,1,-1);
             
             `
         ).replace(

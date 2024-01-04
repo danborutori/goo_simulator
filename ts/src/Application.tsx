@@ -21,7 +21,7 @@ async function createScene(){
         o.receiveShadow = true
         const lit = o as SpotLight
         if( lit.isSpotLight ){
-            lit.shadow.mapSize.setScalar(1024)
+            lit.shadow.mapSize.setScalar(512)
             lit.shadow.camera.near = 3.65
             lit.shadow.camera.far = 8.51
             lit.shadow.camera.updateProjectionMatrix()
