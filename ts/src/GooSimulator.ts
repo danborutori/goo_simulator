@@ -1,7 +1,14 @@
-import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, FloatType, Group, InstancedMesh, LineBasicMaterial, LineSegments, MathUtils, Matrix4, Mesh, MeshStandardMaterial, NearestFilter, PlaneGeometry, RGBADepthPacking, RedFormat, SphereGeometry, Vector2, Vector3, WebGLRenderTarget, WebGLRenderer } from "three";
-import { HitTriangleInfo, MeshBVH, getTriangleHitPointInfo } from "three-mesh-bvh";
+import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, FloatType, Group, InstancedMesh, LineBasicMaterial, LineSegments, MathUtils, Matrix4, Mesh, MeshStandardMaterial, NearestFilter, OrthographicCamera, PlaneGeometry, RGBADepthPacking, RGBAFormat, RedFormat, SphereGeometry, Vector2, Vector3, WebGLRenderTarget, WebGLRenderer } from "three";
+import { FloatVertexAttributeTexture, HitTriangleInfo, MeshBVH, MeshBVHUniformStruct, getTriangleHitPointInfo } from "three-mesh-bvh";
 import { SDFGenerator } from "./SDFGenerator.js";
 import { MarchingDepthMaterial, MarchingMaterial } from "./MarchingMaterial.js";
+import { InitPositionMaterial } from "./material/InitPositionMaterial.js";
+import { render } from "react-dom";
+import { FullScreenQuad } from "three/examples/jsm/Addons";
+import { UpdateForceMaterial } from "./material/UpdateForceMaterial.js";
+import { UpdateVelocityMaterial } from "./material/UpdateVelocityMaterial.js";
+import { UpdatePositionMaterial } from "./material/UpdatePositionMaterial.js";
+import { ParticleMaterial } from "./material/ParticleMaterial.js";
 
 const v1 = new Vector3
 const v2 = new Vector3
@@ -67,15 +74,37 @@ const _collidePair: Map<number, ParticlePair> = new Map
 const _lineSegments: { a: Vector3, b: Vector3 }[] = []
 const _vectorPairCache: { a: Vector3, b: Vector3 }[] = []
 
-
 const sdfGenerator = new SDFGenerator
+
+// function createInstancedMesh( particleCount: number ){
+//     const g = new BufferGeometry()
+//     const particleId = new BufferAttribute( new Float32Array(particleCount), 1)
+//     for( let i=0; i<particleCount; i++ ){
+//         particleId.setX(i,i)
+//     }
+//     g.setAttribute("particleId", particleId)
+//     const m = new InstancedMesh(g,undefined,particleCount)
+//     m.frustumCulled = false
+//     return m
+// }
+
+const fsquad = new FullScreenQuad()
+const initPositionMaterial = new InitPositionMaterial()
+const updateForceMaterial = new UpdateForceMaterial()
+const updateVelocityMaterial = new UpdateVelocityMaterial()
+const updatePositionMaterial = new UpdatePositionMaterial()
 
 export class GooSimulator extends Group {
 
+    // private particleInstancedMesh: InstancedMesh
+    private particleRendertargets: {
+        position: WebGLRenderTarget
+        velocity: WebGLRenderTarget
+        force: WebGLRenderTarget
+    }
     private particles: Particle[]
     private links: Map<number, ParticlePair> = new Map
     private surfaceLinks: Map<number, ParticleToSurfaceLink> = new Map
-    private instancedMesh: InstancedMesh
     private linksLine: LineSegments
     private surfaceLinkLine: LineSegments
     private marchingMesh: Mesh
@@ -84,25 +113,70 @@ export class GooSimulator extends Group {
     private colliders: {
         mesh: Mesh
         bvh: MeshBVH
+        bvhUniform: MeshBVHUniformStruct
+        normalAttributeTexture: FloatVertexAttributeTexture
     }[]
 
     private sdfRendertarget: WebGLRenderTarget
 
     constructor(
+        renderer: WebGLRenderer,
         colliders: Mesh[],
-        particleCount: number,
+        readonly particleCount: number,
         readonly gridSize: number = 256
     ){
         super()
+
+        // this.particleInstancedMesh = createInstancedMesh(particleCount)
+        const particleRendertargetWidth = MathUtils.ceilPowerOfTwo(Math.sqrt(particleCount))
+        this.particleRendertargets = {
+            position: new WebGLRenderTarget(particleRendertargetWidth,particleRendertargetWidth,{
+                format: RGBAFormat,
+                type: FloatType,
+                minFilter: NearestFilter,
+                magFilter: NearestFilter,
+                generateMipmaps: false,
+                wrapS: ClampToEdgeWrapping,
+                wrapT: ClampToEdgeWrapping,
+            }),
+            velocity: new WebGLRenderTarget(particleRendertargetWidth,particleRendertargetWidth,{
+                format: RGBAFormat,
+                type: FloatType,
+                minFilter: NearestFilter,
+                magFilter: NearestFilter,
+                generateMipmaps: false,
+                wrapS: ClampToEdgeWrapping,
+                wrapT: ClampToEdgeWrapping,
+            }),
+            force: new WebGLRenderTarget(particleRendertargetWidth,particleRendertargetWidth,{
+                format: RGBAFormat,
+                type: FloatType,
+                minFilter: NearestFilter,
+                magFilter: NearestFilter,
+                generateMipmaps: false,
+                wrapS: ClampToEdgeWrapping,
+                wrapT: ClampToEdgeWrapping,
+            })
+        }
+        this.initParticle(renderer)
+
+        
         this.particles = new Array(particleCount)
         this.grid = new Array(gridSize*gridSize*gridSize)
         this.colliders = colliders.map( m=>{
+            const bvh = new MeshBVH(m.geometry)
+            const bvhUniform = new MeshBVHUniformStruct()
+            bvhUniform.updateFrom(bvh)
+            const normalAttributeTexture = new FloatVertexAttributeTexture()
+            normalAttributeTexture.updateFrom(m.geometry.attributes.normal as BufferAttribute)
             return {
                 mesh: m,
-                bvh: new MeshBVH(m.geometry)
+                bvh: bvh,
+                bvhUniform: bvhUniform,
+                normalAttributeTexture: normalAttributeTexture
             }
         })
-        const sdfRenderTargetWidth = MathUtils.ceilPowerOfTwo(Math.floor(Math.pow(gridSize,3/2)))
+        const sdfRenderTargetWidth = MathUtils.ceilPowerOfTwo(Math.pow(gridSize,3/2))
         this.sdfRendertarget = new WebGLRenderTarget(sdfRenderTargetWidth,sdfRenderTargetWidth, {
             format: RedFormat,
             type: FloatType,
@@ -129,20 +203,20 @@ export class GooSimulator extends Group {
         }
 
         const group = new Group()
-        group.visible = false
+        // group.visible = false
         this.add( group )
 
-        this.instancedMesh = new InstancedMesh(
-            new SphereGeometry(radius),
-            new MeshStandardMaterial({
-                color: 0xff0000
-            }),
+        const particleMaterial = new ParticleMaterial()
+        particleMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
+        const instancedMesh = new InstancedMesh(
+            new SphereGeometry(radius,8,4),
+            particleMaterial,
             particleCount
         )
-        this.instancedMesh.frustumCulled = false
-        this.instancedMesh.castShadow = true
-        this.instancedMesh.receiveShadow = true
-        group.add(this.instancedMesh)
+        instancedMesh.frustumCulled = false
+        instancedMesh.castShadow = true
+        instancedMesh.receiveShadow = true
+        group.add(instancedMesh)
 
         this.linksLine = new LineSegments( new BufferGeometry(), new LineBasicMaterial({
             color: 0x00ff00,
@@ -178,7 +252,25 @@ export class GooSimulator extends Group {
         this.marchingMesh.onBeforeShadow = renderer=>{            
             marchingDepthMaterial.uniforms.resolution.value.setScalar(renderer.getRenderTarget()!.width)
         }
-        this.add(this.marchingMesh)
+        // this.add(this.marchingMesh)
+    }
+
+    private initParticle( renderer: WebGLRenderer ){
+
+        const restore = {
+            rendertarget: renderer.getRenderTarget(),
+            activeCubeFace: renderer.getActiveCubeFace(),
+            activeMipmapLevel: renderer.getActiveMipmapLevel()
+        }
+
+        initPositionMaterial.uniforms.radius.value = radius
+        initPositionMaterial.uniforms.particleCount.value = this.particleCount
+        initPositionMaterial.uniforms.rendertargetWidth.value = this.particleRendertargets.position.width
+        fsquad.material = initPositionMaterial
+        renderer.setRenderTarget( this.particleRendertargets.position )
+        fsquad.render(renderer)
+
+        renderer.setRenderTarget(restore.rendertarget,restore.activeCubeFace,restore.activeMipmapLevel)
     }
 
     update( deltaTime: number, renderer: WebGLRenderer ){
@@ -189,14 +281,24 @@ export class GooSimulator extends Group {
         if(this.deltaTime>fixedTimeStep)
             this.recycleParticle()
 
+        const restore = {
+            rendertarget: renderer.getRenderTarget(),
+            activeCubeFace: renderer.getActiveCubeFace(),
+            activeMipmapLevel: renderer.getActiveMipmapLevel(),
+            autoClear: renderer.autoClear
+        }
+
         while( this.deltaTime>fixedTimeStep ){
+            this.simulateGPU( fixedTimeStep, renderer )
             this.simulate( fixedTimeStep )
             this.deltaTime -= fixedTimeStep
             simulationRun = true
         }
 
+        renderer.setRenderTarget(restore.rendertarget,restore.activeCubeFace,restore.activeMipmapLevel)
+        renderer.autoClear = restore.autoClear
+
         if( simulationRun ){
-            this.updateInstanceMatrix()
             this.updateLines()
             this.updateSurfaceLines()
             for( let l of this.links ){
@@ -229,6 +331,34 @@ export class GooSimulator extends Group {
     gridIndexFromPosition( v: Vector3 ){
         _v1.copy(v).divideScalar(gridCellSize).floor().addScalar(this.gridSize/2).clampScalar(0,this.gridSize-1)
         return _v1.x+_v1.y*this.gridSize+_v1.z*this.gridSize*this.gridSize
+    }
+
+    private simulateGPU( deltaTime: number, renderer: WebGLRenderer ){
+
+        renderer.autoClear = true
+
+        updateForceMaterial.uniforms.tVel.value = this.particleRendertargets.velocity.texture
+        updateForceMaterial.uniforms.particleMass.value = particleMass
+        updateForceMaterial.uniforms.gravity.value.copy( gravity )
+        updateForceMaterial.uniforms.dampingFactor.value = dampingFactor        
+        fsquad.material = updateForceMaterial
+        renderer.setRenderTarget( this.particleRendertargets.force )
+        fsquad.render(renderer)
+
+        renderer.autoClear = false
+
+        updateVelocityMaterial.uniforms.deltaTime.value = deltaTime
+        updateVelocityMaterial.uniforms.tForce.value = this.particleRendertargets.force.texture
+        fsquad.material = updateVelocityMaterial
+        renderer.setRenderTarget( this.particleRendertargets.velocity )
+        fsquad.render(renderer)
+
+        updatePositionMaterial.uniforms.deltaTime.value = deltaTime
+        updatePositionMaterial.uniforms.tVel.value = this.particleRendertargets.velocity.texture
+        fsquad.material = updatePositionMaterial
+        renderer.setRenderTarget( this.particleRendertargets.position )
+        fsquad.render(renderer)
+        
     }
 
     private simulate( deltaTime: number ){
@@ -441,13 +571,6 @@ export class GooSimulator extends Group {
                 p.position.y = 4+(i++)*radius
             }
         }
-    }
-
-    private updateInstanceMatrix(){
-        for( let p of this.particles ){
-            this.instancedMesh.setMatrixAt(p.index,m1.makeTranslation(p.position))
-        }
-        this.instancedMesh.instanceMatrix.needsUpdate = true
     }
 
     private updateLines(){

@@ -188,7 +188,7 @@ export * from './loaders/GLTFLoader.js';
 // export * from './postprocessing/MaskPass.js';
 // export * from './postprocessing/OutlinePass.js';
 // export * from './postprocessing/OutputPass.js';
-// export * from './postprocessing/Pass.js';
+export * from './postprocessing/Pass.js';
 // export * from './postprocessing/RenderPass.js';
 // export * from './postprocessing/RenderPixelatedPass.js';
 // export * from './postprocessing/SAOPass.js';

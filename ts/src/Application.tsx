@@ -42,7 +42,7 @@ export class Application {
     private renderer!: WebGLRenderer
 
 
-    private gooSimulator: GooSimulator
+    private gooSimulator!: GooSimulator
     private bunnyRotDir = 0
 
     static async create(){
@@ -57,14 +57,6 @@ export class Application {
         private camera: PerspectiveCamera,
         private bunny: Object3D
     ){
-        const meshes: Mesh[] = []
-        scene.traverse(((m: Mesh)=>{
-            if( m.isMesh ){
-                meshes.push(m)
-            }
-        }) as (o:Object3D)=>void)
-        this.gooSimulator = new GooSimulator(meshes,4096)
-        this.scene.add(this.gooSimulator)
     }
 
     init(mainCanvas: HTMLCanvasElement){
@@ -98,6 +90,15 @@ export class Application {
         controls.maxPolarAngle = Math.PI/2
         controls.target.set(0,1,0)
         controls.update()
+
+        const meshes: Mesh[] = []
+        this.scene.traverse(((m: Mesh)=>{
+            if( m.isMesh ){
+                meshes.push(m)
+            }
+        }) as (o:Object3D)=>void)
+        this.gooSimulator = new GooSimulator(this.renderer,meshes,4096)
+        this.scene.add(this.gooSimulator)
 
         window.addEventListener("resize", ()=>{ this.onResize() })
         window.addEventListener("keydown", event=>{
