@@ -6,6 +6,7 @@ export class UpdateVelocityMaterial extends ShaderMaterial {
         super({
             uniforms: {
                 deltaTime: { value: 0 },
+                particleMass: { value: 1 },
                 tForce: { value: null }
             },
             vertexShader: `
@@ -19,12 +20,13 @@ export class UpdateVelocityMaterial extends ShaderMaterial {
             fragmentShader: `
 
             uniform float deltaTime;
+            uniform  float particleMass;
             uniform sampler2D tForce;
 
             varying vec2 vUv;
 
             void main(){
-                gl_FragColor = vec4( texture2D(tForce, vUv).xyz*deltaTime, 1 );
+                gl_FragColor = vec4( texture2D(tForce, vUv).xyz*deltaTime/particleMass, 1 );
             }
             `,
             transparent: true,

@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, Color, FloatType, Group, InstancedMesh, LineBasicMaterial, LineSegments, MathUtils, Matrix4, Mesh, NearestFilter, OrthographicCamera, PlaneGeometry, RGBADepthPacking, RGBAFormat, RedFormat, SphereGeometry, Vector2, Vector3, WebGLRenderTarget, WebGLRenderer } from "three";
+import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, Color, FloatType, Group, HalfFloatType, InstancedMesh, LineBasicMaterial, LineSegments, MathUtils, Matrix4, Mesh, NearestFilter, OrthographicCamera, PlaneGeometry, RGBADepthPacking, RGBAFormat, RedFormat, SphereGeometry, Vector2, Vector3, WebGLRenderTarget, WebGLRenderer } from "three";
 import { HitTriangleInfo, MeshBVH, MeshBVHUniformStruct, getTriangleHitPointInfo } from "three-mesh-bvh";
 import { SDFGenerator } from "./SDFGenerator.js";
 import { MarchingDepthMaterial, MarchingMaterial } from "./MarchingMaterial.js";
@@ -87,6 +87,8 @@ function createInstancedMesh( particleCount: number ){
     }
     g.setAttribute("position", position)
     const m = new InstancedMesh(g,undefined,particleCount)
+    ;(m as any).isMesh = false
+    ;(m as any).isPoints = true
     m.frustumCulled = false
     return m
 }
@@ -392,6 +394,7 @@ export class GooSimulator extends Group {
 
         updateVelocityMaterial.uniforms.deltaTime.value = deltaTime
         updateVelocityMaterial.uniforms.tForce.value = this.particleRendertargets.force.texture
+        updateVelocityMaterial.uniforms.particleMass.value = particleMass
         fsquad.material = updateVelocityMaterial
         renderer.setRenderTarget( this.particleRendertargets.velocity )
         fsquad.render(renderer)

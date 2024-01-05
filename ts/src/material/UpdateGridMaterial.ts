@@ -18,6 +18,7 @@ export class UpdateGridMaterial extends ShaderMaterial {
             uniform float gridTextureSize;
 
             varying vec3 vParticleUv;
+            varying float vDiscard;
 
             void main(){
                 vec2 tPositionSize = vec2(textureSize(tPosition,0));
@@ -30,15 +31,12 @@ export class UpdateGridMaterial extends ShaderMaterial {
                     instanceId
                 );
 
-                vec3 position = texture2D( tPosition, uv ).xyz;
+                vec3 position = texture2D( tPosition, vParticleUv.xy ).xyz;
 
-                vec3 gridPos = clamp(
-                    (floor(position/gridCellSize))+floor(gridSize/2.0),
-                    0.0,
-                    gridSize-1.0
-                );
-                float gridId = gridPos.x+(gridPos.y+gridPos.z*gridSize)*gridSize;
-                                
+                vec3 gridPos = floor(position/gridCellSize)+gridSize/2.0;
+                float gridId = dot(gridPos,vec3(1,gridSize,gridSize*gridSize));                                
+                vDiscard = (any(lessThan(gridPos,vec3(0,0,0))) || any(greaterThanEqual(gridPos,vec3(gridSize,gridSize,gridSize))))?1.0:0.0;
+
                 gl_Position = vec4(
                     (vec2(
                         mod(gridId,gridTextureSize),
@@ -51,8 +49,11 @@ export class UpdateGridMaterial extends ShaderMaterial {
             `,
             fragmentShader: `
             varying vec3 vParticleUv;
+            varying float vDiscard;
 
             void main(){
+                if( vDiscard==1.0 ) discard;
+
                 gl_FragColor = vec4(vParticleUv,1);
             }
             `,
