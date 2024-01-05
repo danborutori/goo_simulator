@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, Color, FloatType, Group, InstancedBufferAttribute, InstancedMesh, LineBasicMaterial, LineSegments, MathUtils, Matrix4, Mesh, NearestFilter, OrthographicCamera, PlaneGeometry, RGBADepthPacking, RGBAFormat, RedFormat, SphereGeometry, Vector2, Vector3, WebGLRenderTarget, WebGLRenderer } from "three";
+import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, Color, FloatType, Group, IUniform, InstancedBufferAttribute, InstancedMesh, LineBasicMaterial, LineSegments, MathUtils, Matrix4, Mesh, NearestFilter, OrthographicCamera, PlaneGeometry, RGBADepthPacking, RGBAFormat, RedFormat, SphereGeometry, Texture, Vector2, Vector3, WebGLRenderTarget, WebGLRenderer } from "three";
 import { HitTriangleInfo, MeshBVH, MeshBVHUniformStruct, getTriangleHitPointInfo } from "three-mesh-bvh";
 import { SDFGenerator } from "./SDFGenerator.js";
 import { MarchingDepthMaterial, MarchingMaterial } from "./MarchingMaterial.js";
@@ -111,6 +111,78 @@ function createInstancedMesh(
     return m
 }
 
+function createLinkMesh(
+    particleCount: number,
+    particleRendertargetWidth: number,
+    tPosition: IUniform,
+    tLink: IUniform
+){
+    const g = new BufferGeometry()
+
+    const position = new BufferAttribute( new Float32Array(particleCount*3*8), 3)
+    const uv = new BufferAttribute( new Float32Array(particleCount*2*8), 2)
+    const linkIndex = new BufferAttribute( new Int32Array(particleCount*8), 1)
+
+    for( let i=0; i<particleCount; i++ ){
+        v2_1.set(
+            i%particleRendertargetWidth,
+            Math.floor(i/particleRendertargetWidth)
+        ).addScalar(0.5).divideScalar(particleRendertargetWidth)
+        for( let j=0; j<8; j++ )
+            uv.setXY(i*8+j,v2_1.x,v2_1.y)
+        linkIndex.setX(i*8,-1)
+        linkIndex.setX(i*8+1,0)
+        linkIndex.setX(i*8+2,-1)
+        linkIndex.setX(i*8+3,1)
+        linkIndex.setX(i*8+4,-1)
+        linkIndex.setX(i*8+5,2)
+        linkIndex.setX(i*8+6,-1)
+        linkIndex.setX(i*8+7,3)
+    }
+
+    g.setAttribute("position", position)
+    g.setAttribute("uv", uv)
+    g.setAttribute("linkIndex", linkIndex)
+
+    const material = new LineBasicMaterial({
+        color: 0x00ff00
+    })
+
+    material.onBeforeCompile = shader=>{
+        shader.uniforms.tPosition = tPosition
+        shader.uniforms.tLink = tLink
+
+        shader.vertexShader = `
+        uniform sampler2D tPosition;
+        uniform sampler2D tLink;
+
+        attribute int linkIndex;
+        `+shader.vertexShader.replace(
+            "void main() {",
+            `
+            void main() {
+                vec3 position = texture2D( tPosition, uv ).xyz;
+                if( linkIndex>=0 ){
+                    float id = texture2D( tLink, uv )[linkIndex];
+                    if( id>=0.0 ){
+                        vec2 tPositionSize = vec2(textureSize( tPosition, 0 ));
+                        vec2 uv = (vec2(
+                            mod( id, tPositionSize.x ),
+                            floor( id/tPositionSize.x )
+                        )+0.5)/tPositionSize;
+
+                        position = texture2D( tPosition, uv ).xyz;
+                    }
+                }
+            `
+        )
+    }
+
+    const mesh = new LineSegments(g, material)
+
+    return mesh
+}
+
 const fsquad = new FullScreenQuad()
 const initPositionMaterial = new InitPositionMaterial()
 const updateForceMaterial = new UpdateForceMaterial()
@@ -154,6 +226,9 @@ export class GooSimulator extends Group {
     }[]
 
     private sdfRendertarget: WebGLRenderTarget
+    private uniforms = {
+        tLink: { value: null } as IUniform<Texture | null>
+    }
 
     constructor(
         renderer: WebGLRenderer,
@@ -283,11 +358,14 @@ export class GooSimulator extends Group {
         instancedMesh.receiveShadow = true
         group.add(instancedMesh)
 
-        this.linksLine = new LineSegments( new BufferGeometry(), new LineBasicMaterial({
-            color: 0x00ff00,
-        }))
+        this.linksLine = createLinkMesh(
+            particleCount,
+            particleRendertargetWidth,
+            {value: this.particleRendertargets.position.texture},
+            this.uniforms.tLink
+        )
         this.linksLine.frustumCulled = false
-        this.linksLine.castShadow = true
+        this.linksLine.castShadow = false
         this.linksLine.receiveShadow = false
         group.add(this.linksLine)
 
@@ -367,7 +445,6 @@ export class GooSimulator extends Group {
         renderer.autoClear = restore.autoClear
 
         if( simulationRun ){
-            this.updateLines()
             this.updateSurfaceLines()
             for( let l of this.links ){
                 const pair = _vectorPairCache.pop() || {a: new Vector3, b: new Vector3}
@@ -420,6 +497,7 @@ export class GooSimulator extends Group {
         const tmp = this.particleRendertargets.write
         this.particleRendertargets.write = this.particleRendertargets.read
         this.particleRendertargets.read = tmp
+        this.uniforms.tLink.value = this.particleRendertargets.read.link.texture
 
         // update force
         renderer.autoClear = true
@@ -700,34 +778,6 @@ export class GooSimulator extends Group {
                 p.position.y = 4+(i++)*radius
             }
         }
-    }
-
-    private updateLines(){
-        const g = this.linksLine.geometry
-
-        let position = g.attributes.position
-        if( !position || position.count<this.particles.length ){
-            position = new BufferAttribute(new Float32Array(this.particles.length*3), 3)
-            g.setAttribute("position",position)
-        }
-        for( let i=0; i<this.particles.length; i++ ){
-            this.particles[i].position.toArray( position.array, i*3 )
-        }
-        position.needsUpdate = true
-
-        let index = g.index
-        if( !index || index.array.length<this.links.size*2 ){
-            index = new BufferAttribute( new Uint16Array(this.links.size*2), 1 )
-            g.setIndex(index)
-        }
-        let i = 0
-        for( let e of this.links ){
-            index.setX(i*2,e[1].a.index)
-            index.setX(i*2+1,e[1].b.index)
-            i++
-        }
-        index.needsUpdate = true
-        ;(index as any).count = this.links.size*2
     }
 
     private updateSurfaceLines(){
