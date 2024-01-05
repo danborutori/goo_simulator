@@ -11,6 +11,8 @@ import { ParticleMaterial } from "./material/ParticleMaterial.js";
 import { BvhCollisionMaterial } from "./material/BvhCollisionMaterial.js";
 import { UpdateGridMaterial } from "./material/UpdateGridMaterial.js";
 import { ParticleToParticleCollisionMaterial } from "./material/ParticleToParticleCollisionMaterial.js";
+import { UpdateLinkMaterial } from "./material/UpdateLinkMaterial.js";
+import { ApplyLinkForceMaterial } from "./material/ApplyLinkForceMaterial.js";
 
 const v1 = new Vector3
 const v2 = new Vector3
@@ -117,6 +119,8 @@ const updatePositionMaterial = new UpdatePositionMaterial()
 const bvhCollisionMaterial = new BvhCollisionMaterial()
 const updateGridMaterial = new UpdateGridMaterial()
 const particleToParticleCollisionMaterial = new ParticleToParticleCollisionMaterial()
+const updateLinkMaterial = new UpdateLinkMaterial()
+const applyLinkForceMaterial = new ApplyLinkForceMaterial()
 const dummyCamera = new OrthographicCamera()
 
 export class GooSimulator extends Group {
@@ -125,6 +129,12 @@ export class GooSimulator extends Group {
         position: WebGLRenderTarget
         velocity: WebGLRenderTarget
         force: WebGLRenderTarget
+        read: {
+            link: WebGLRenderTarget
+        },
+        write: {
+            link: WebGLRenderTarget
+        }
     }
     private particleInstancedMesh: InstancedMesh
     private gridRenderTarget: WebGLRenderTarget
@@ -182,7 +192,29 @@ export class GooSimulator extends Group {
                 generateMipmaps: false,
                 wrapS: ClampToEdgeWrapping,
                 wrapT: ClampToEdgeWrapping
-            })
+            }),
+            read: {
+                link: new WebGLRenderTarget(particleRendertargetWidth,particleRendertargetWidth,{
+                    format: RGBAFormat,
+                    type: FloatType,
+                    minFilter: NearestFilter,
+                    magFilter: NearestFilter,
+                    generateMipmaps: false,
+                    wrapS: ClampToEdgeWrapping,
+                    wrapT: ClampToEdgeWrapping
+                })
+            },
+            write: {
+                link: new WebGLRenderTarget(particleRendertargetWidth,particleRendertargetWidth,{
+                    format: RGBAFormat,
+                    type: FloatType,
+                    minFilter: NearestFilter,
+                    magFilter: NearestFilter,
+                    generateMipmaps: false,
+                    wrapS: ClampToEdgeWrapping,
+                    wrapT: ClampToEdgeWrapping
+                })
+            }
         }
         this.initParticle(renderer)
         const gridRenderTargetWidth = MathUtils.ceilPowerOfTwo(Math.sqrt(gridSize*gridSize*gridSize))
@@ -372,10 +404,36 @@ export class GooSimulator extends Group {
 
     private simulateGPU( deltaTime: number, renderer: WebGLRenderer ){
 
+        // update link
+        renderer.autoClear = true
+        renderer.setClearColor(-1,-1)
+        updateLinkMaterial.uniforms.tLink.value = this.particleRendertargets.read.link.texture
+        updateLinkMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
+        updateLinkMaterial.uniforms.formLinkDistance.value = formLinkDistance
+        updateLinkMaterial.uniforms.breakLinkDistance.value = breakLinkDistance
+        updateLinkMaterial.uniforms.tGrid.value = this.gridRenderTarget.texture
+        updateLinkMaterial.uniforms.gridSize.value = this.gridSize
+        updateLinkMaterial.uniforms.gridCellSize.value = gridCellSize
+        fsquad.material = updateLinkMaterial
+        renderer.setRenderTarget( this.particleRendertargets.write.link )
+        fsquad.render( renderer )
+        const tmp = this.particleRendertargets.write
+        this.particleRendertargets.write = this.particleRendertargets.read
+        this.particleRendertargets.read = tmp
+
         // update force
         renderer.autoClear = true
         renderer.setClearColor(0,0)
         renderer.setRenderTarget( this.particleRendertargets.force )
+
+        applyLinkForceMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
+        applyLinkForceMaterial.uniforms.tLink.value = this.particleRendertargets.read.link.texture
+        applyLinkForceMaterial.uniforms.formLinkDistance.value = formLinkDistance
+        applyLinkForceMaterial.uniforms.linkStrength.value = linkStrength
+        fsquad.material = applyLinkForceMaterial
+        fsquad.render(renderer)
+
+        renderer.autoClear = false
 
         particleToParticleCollisionMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
         particleToParticleCollisionMaterial.uniforms.tGrid.value = this.gridRenderTarget.texture
@@ -384,8 +442,6 @@ export class GooSimulator extends Group {
         particleToParticleCollisionMaterial.uniforms.radius.value = radius
         fsquad.material = particleToParticleCollisionMaterial
         fsquad.render(renderer)
-
-        renderer.autoClear = false
 
         bvhCollisionMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
         bvhCollisionMaterial.uniforms.radius.value = radius
