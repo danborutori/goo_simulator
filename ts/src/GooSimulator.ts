@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, Color, FloatType, Group, InstancedMesh, LineBasicMaterial, LineSegments, MathUtils, Matrix4, Mesh, NearestFilter, PlaneGeometry, RGBADepthPacking, RGBAFormat, RedFormat, SphereGeometry, Vector2, Vector3, WebGLRenderTarget, WebGLRenderer } from "three";
+import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, Color, FloatType, Group, InstancedMesh, LineBasicMaterial, LineSegments, MathUtils, Matrix4, Mesh, NearestFilter, OrthographicCamera, PlaneGeometry, RGBADepthPacking, RGBAFormat, RedFormat, SphereGeometry, Vector2, Vector3, WebGLRenderTarget, WebGLRenderer } from "three";
 import { HitTriangleInfo, MeshBVH, MeshBVHUniformStruct, getTriangleHitPointInfo } from "three-mesh-bvh";
 import { SDFGenerator } from "./SDFGenerator.js";
 import { MarchingDepthMaterial, MarchingMaterial } from "./MarchingMaterial.js";
@@ -9,6 +9,7 @@ import { UpdateVelocityMaterial } from "./material/UpdateVelocityMaterial.js";
 import { UpdatePositionMaterial } from "./material/UpdatePositionMaterial.js";
 import { ParticleMaterial } from "./material/ParticleMaterial.js";
 import { BvhCollisionMaterial } from "./material/BvhCollisionMaterial.js";
+import { UpdateGridMaterial } from "./material/UpdateGridMaterial.js";
 
 const v1 = new Vector3
 const v2 = new Vector3
@@ -77,17 +78,17 @@ const _vectorPairCache: { a: Vector3, b: Vector3 }[] = []
 
 const sdfGenerator = new SDFGenerator
 
-// function createInstancedMesh( particleCount: number ){
-//     const g = new BufferGeometry()
-//     const particleId = new BufferAttribute( new Float32Array(particleCount), 1)
-//     for( let i=0; i<particleCount; i++ ){
-//         particleId.setX(i,i)
-//     }
-//     g.setAttribute("particleId", particleId)
-//     const m = new InstancedMesh(g,undefined,particleCount)
-//     m.frustumCulled = false
-//     return m
-// }
+function createInstancedMesh( particleCount: number ){
+    const g = new BufferGeometry()
+    const position = new BufferAttribute( new Float32Array(particleCount*3), 3)
+    for( let i=0; i<particleCount; i++ ){
+        position.setXYZ(i,0,0,0)
+    }
+    g.setAttribute("position", position)
+    const m = new InstancedMesh(g,undefined,particleCount)
+    m.frustumCulled = false
+    return m
+}
 
 const fsquad = new FullScreenQuad()
 const initPositionMaterial = new InitPositionMaterial()
@@ -95,15 +96,18 @@ const updateForceMaterial = new UpdateForceMaterial()
 const updateVelocityMaterial = new UpdateVelocityMaterial()
 const updatePositionMaterial = new UpdatePositionMaterial()
 const bvhCollisionMaterial = new BvhCollisionMaterial()
+const updateGridMaterial = new UpdateGridMaterial()
+const dummyCamera = new OrthographicCamera()
 
 export class GooSimulator extends Group {
 
-    // private particleInstancedMesh: InstancedMesh
     private particleRendertargets: {
         position: WebGLRenderTarget
         velocity: WebGLRenderTarget
         force: WebGLRenderTarget
     }
+    private particleInstancedMesh: InstancedMesh
+    private gridRenderTarget: WebGLRenderTarget
 
     private particles: Particle[]
     private links: Map<number, ParticlePair> = new Map
@@ -129,7 +133,7 @@ export class GooSimulator extends Group {
     ){
         super()
 
-        // this.particleInstancedMesh = createInstancedMesh(particleCount)
+        this.particleInstancedMesh = createInstancedMesh(particleCount)
         const particleRendertargetWidth = MathUtils.ceilPowerOfTwo(Math.sqrt(particleCount))
         this.particleRendertargets = {
             position: new WebGLRenderTarget(particleRendertargetWidth,particleRendertargetWidth,{
@@ -139,7 +143,7 @@ export class GooSimulator extends Group {
                 magFilter: NearestFilter,
                 generateMipmaps: false,
                 wrapS: ClampToEdgeWrapping,
-                wrapT: ClampToEdgeWrapping,
+                wrapT: ClampToEdgeWrapping
             }),
             velocity: new WebGLRenderTarget(particleRendertargetWidth,particleRendertargetWidth,{
                 format: RGBAFormat,
@@ -148,7 +152,7 @@ export class GooSimulator extends Group {
                 magFilter: NearestFilter,
                 generateMipmaps: false,
                 wrapS: ClampToEdgeWrapping,
-                wrapT: ClampToEdgeWrapping,
+                wrapT: ClampToEdgeWrapping
             }),
             force: new WebGLRenderTarget(particleRendertargetWidth,particleRendertargetWidth,{
                 format: RGBAFormat,
@@ -157,11 +161,21 @@ export class GooSimulator extends Group {
                 magFilter: NearestFilter,
                 generateMipmaps: false,
                 wrapS: ClampToEdgeWrapping,
-                wrapT: ClampToEdgeWrapping,
+                wrapT: ClampToEdgeWrapping
             })
         }
         this.initParticle(renderer)
-        
+        const gridRenderTargetWidth = MathUtils.ceilPowerOfTwo(Math.sqrt(gridSize*gridSize*gridSize))
+        this.gridRenderTarget = new WebGLRenderTarget(gridRenderTargetWidth,gridRenderTargetWidth,{
+            format: RGBAFormat,
+            type: FloatType,
+            minFilter: NearestFilter,
+            magFilter: NearestFilter,
+            generateMipmaps: false,
+            wrapS: ClampToEdgeWrapping,
+            wrapT: ClampToEdgeWrapping
+        })
+
         this.particles = new Array(particleCount)
         this.grid = new Array(gridSize*gridSize*gridSize)
         this.colliders = colliders.map( m=>{
@@ -378,7 +392,17 @@ export class GooSimulator extends Group {
         fsquad.material = updatePositionMaterial
         renderer.setRenderTarget( this.particleRendertargets.position )
         fsquad.render(renderer)
-        
+
+        // update grid
+        updateGridMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
+        updateGridMaterial.uniforms.gridSize.value = this.gridSize
+        updateGridMaterial.uniforms.gridCellSize.value = gridCellSize
+        updateGridMaterial.uniforms.gridTextureSize.value = this.gridRenderTarget.width
+        this.particleInstancedMesh.material = updateGridMaterial
+        renderer.autoClear = true
+        renderer.setClearColor(0,0)
+        renderer.setRenderTarget( this.gridRenderTarget )
+        renderer.render( this.particleInstancedMesh, dummyCamera )
     }
 
     private simulate( deltaTime: number ){
