@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, Color, FloatType, Group, HalfFloatType, InstancedMesh, LineBasicMaterial, LineSegments, MathUtils, Matrix4, Mesh, NearestFilter, OrthographicCamera, PlaneGeometry, RGBADepthPacking, RGBAFormat, RedFormat, SphereGeometry, Vector2, Vector3, WebGLRenderTarget, WebGLRenderer } from "three";
+import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, Color, FloatType, Group, InstancedMesh, LineBasicMaterial, LineSegments, MathUtils, Matrix4, Mesh, NearestFilter, OrthographicCamera, PlaneGeometry, RGBADepthPacking, RGBAFormat, RedFormat, SphereGeometry, Vector2, Vector3, WebGLRenderTarget, WebGLRenderer } from "three";
 import { HitTriangleInfo, MeshBVH, MeshBVHUniformStruct, getTriangleHitPointInfo } from "three-mesh-bvh";
 import { SDFGenerator } from "./SDFGenerator.js";
 import { MarchingDepthMaterial, MarchingMaterial } from "./MarchingMaterial.js";
@@ -14,6 +14,7 @@ import { ParticleToParticleCollisionMaterial } from "./material/ParticleToPartic
 
 const v1 = new Vector3
 const v2 = new Vector3
+const v2_1 = new Vector2
 const m1 = new Matrix4
 
 const _v1 = new Vector3
@@ -79,11 +80,25 @@ const _vectorPairCache: { a: Vector3, b: Vector3 }[] = []
 
 const sdfGenerator = new SDFGenerator
 
-function createInstancedMesh( particleCount: number ){
+function createInstancedMesh(
+    particleCount: number,
+    positionTextureSize: number
+){
     const g = new BufferGeometry()
     const position = new BufferAttribute( new Float32Array(particleCount*3), 3)
     for( let i=0; i<particleCount; i++ ){
-        position.setXYZ(i,0,0,0)
+
+        v2_1.set(
+            i%positionTextureSize,
+            Math.floor(i/positionTextureSize)
+        ).addScalar(0.5).divideScalar(positionTextureSize)
+
+        position.setXYZ(
+            i,
+            i,
+            v2_1.x,
+            v2_1.y
+        )
     }
     g.setAttribute("position", position)
     const m = new InstancedMesh(g,undefined,particleCount)
@@ -137,8 +152,8 @@ export class GooSimulator extends Group {
     ){
         super()
 
-        this.particleInstancedMesh = createInstancedMesh(particleCount)
         const particleRendertargetWidth = MathUtils.ceilPowerOfTwo(Math.sqrt(particleCount))
+        this.particleInstancedMesh = createInstancedMesh(particleCount,particleRendertargetWidth)
         this.particleRendertargets = {
             position: new WebGLRenderTarget(particleRendertargetWidth,particleRendertargetWidth,{
                 format: RGBAFormat,

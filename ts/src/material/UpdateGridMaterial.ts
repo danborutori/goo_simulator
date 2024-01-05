@@ -21,19 +21,11 @@ export class UpdateGridMaterial extends ShaderMaterial {
             varying float vDiscard;
 
             void main(){
-                vec2 tPositionSize = vec2(textureSize(tPosition,0));
-                float instanceId = float(gl_InstanceID);
-                vParticleUv = vec3(
-                    (vec2(
-                        mod(instanceId,tPositionSize.x),
-                        floor(instanceId/tPositionSize.x)
-                    )+0.5)/tPositionSize,
-                    instanceId
-                );
+                vParticleUv = position.yz;
 
-                vec3 position = texture2D( tPosition, vParticleUv.xy ).xyz;
+                vec3 pos = texture2D( tPosition, vParticleUv.xy ).xyz;
 
-                vec3 gridPos = floor(position/gridCellSize)+gridSize/2.0;
+                vec3 gridPos = floor(pos/gridCellSize)+gridSize/2.0;
                 float gridId = dot(gridPos,vec3(1,gridSize,gridSize*gridSize));                                
                 vDiscard = (any(lessThan(gridPos,vec3(0,0,0))) || any(greaterThanEqual(gridPos,vec3(gridSize,gridSize,gridSize))))?1.0:0.0;
 
