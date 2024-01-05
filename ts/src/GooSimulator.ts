@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, Color, FloatType, Group, InstancedMesh, LineBasicMaterial, LineSegments, MathUtils, Matrix4, Mesh, NearestFilter, OrthographicCamera, PlaneGeometry, RGBADepthPacking, RGBAFormat, RedFormat, SphereGeometry, Vector2, Vector3, WebGLRenderTarget, WebGLRenderer } from "three";
+import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, Color, FloatType, Group, InstancedBufferAttribute, InstancedMesh, LineBasicMaterial, LineSegments, MathUtils, Matrix4, Mesh, NearestFilter, OrthographicCamera, PlaneGeometry, RGBADepthPacking, RGBAFormat, RedFormat, SphereGeometry, Vector2, Vector3, WebGLRenderTarget, WebGLRenderer } from "three";
 import { HitTriangleInfo, MeshBVH, MeshBVHUniformStruct, getTriangleHitPointInfo } from "three-mesh-bvh";
 import { SDFGenerator } from "./SDFGenerator.js";
 import { MarchingDepthMaterial, MarchingMaterial } from "./MarchingMaterial.js";
@@ -85,7 +85,8 @@ function createInstancedMesh(
     positionTextureSize: number
 ){
     const g = new BufferGeometry()
-    const position = new BufferAttribute( new Float32Array(particleCount*3), 3)
+    g.setAttribute("position", new BufferAttribute(new Float32Array([0,0,0]), 3))
+    const instanceId = new InstancedBufferAttribute( new Float32Array(particleCount*3), 3)
     for( let i=0; i<particleCount; i++ ){
 
         v2_1.set(
@@ -93,14 +94,14 @@ function createInstancedMesh(
             Math.floor(i/positionTextureSize)
         ).addScalar(0.5).divideScalar(positionTextureSize)
 
-        position.setXYZ(
+        instanceId.setXYZ(
             i,
             i,
             v2_1.x,
             v2_1.y
         )
     }
-    g.setAttribute("position", position)
+    g.setAttribute("instanceId", instanceId)
     const m = new InstancedMesh(g,undefined,particleCount)
     ;(m as any).isMesh = false
     ;(m as any).isPoints = true

@@ -50,7 +50,7 @@ export class ParticleToParticleCollisionMaterial extends ShaderMaterial {
                             vec4 gridValue = texture2D( tGrid, gridUv );
 
                             if( gridValue.w!=0.0 ){
-                                vec3 positionB = texture2D( tPosition, gridValue.xy ).xyz;
+                                vec3 positionB = texture2D( tPosition, gridValue.yz ).xyz;
 
                                 vec3 v = positionA-positionB;
                                 float d = length( v );
