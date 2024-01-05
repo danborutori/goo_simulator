@@ -10,6 +10,7 @@ import { UpdatePositionMaterial } from "./material/UpdatePositionMaterial.js";
 import { ParticleMaterial } from "./material/ParticleMaterial.js";
 import { BvhCollisionMaterial } from "./material/BvhCollisionMaterial.js";
 import { UpdateGridMaterial } from "./material/UpdateGridMaterial.js";
+import { ParticleToParticleCollisionMaterial } from "./material/ParticleToParticleCollisionMaterial.js";
 
 const v1 = new Vector3
 const v2 = new Vector3
@@ -97,6 +98,7 @@ const updateVelocityMaterial = new UpdateVelocityMaterial()
 const updatePositionMaterial = new UpdatePositionMaterial()
 const bvhCollisionMaterial = new BvhCollisionMaterial()
 const updateGridMaterial = new UpdateGridMaterial()
+const particleToParticleCollisionMaterial = new ParticleToParticleCollisionMaterial()
 const dummyCamera = new OrthographicCamera()
 
 export class GooSimulator extends Group {
@@ -355,8 +357,18 @@ export class GooSimulator extends Group {
         // update force
         renderer.autoClear = true
         renderer.setClearColor(0,0)
-
         renderer.setRenderTarget( this.particleRendertargets.force )
+
+        particleToParticleCollisionMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
+        particleToParticleCollisionMaterial.uniforms.tGrid.value = this.gridRenderTarget.texture
+        particleToParticleCollisionMaterial.uniforms.gridSize.value = this.gridSize
+        particleToParticleCollisionMaterial.uniforms.gridCellSize.value = gridCellSize
+        particleToParticleCollisionMaterial.uniforms.radius.value = radius
+        fsquad.material = particleToParticleCollisionMaterial
+        fsquad.render(renderer)
+
+        renderer.autoClear = false
+
         bvhCollisionMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
         bvhCollisionMaterial.uniforms.radius.value = radius
         bvhCollisionMaterial.uniforms.stiffness.value = stiffness        
@@ -368,8 +380,6 @@ export class GooSimulator extends Group {
             fsquad.render(renderer)
         }
 
-        renderer.autoClear = false
-
         updateForceMaterial.uniforms.tVel.value = this.particleRendertargets.velocity.texture
         updateForceMaterial.uniforms.particleMass.value = particleMass
         updateForceMaterial.uniforms.gravity.value.copy( gravity )
@@ -377,7 +387,7 @@ export class GooSimulator extends Group {
         fsquad.material = updateForceMaterial
         fsquad.render(renderer)
 
-        // update veolocity
+        // update velocity
         renderer.autoClear = false
 
         updateVelocityMaterial.uniforms.deltaTime.value = deltaTime
