@@ -71,7 +71,7 @@ export class BvhCollisionMaterial extends ShaderMaterial {
                     float d = radius-distance;
                     vec3 wPoint = (bvhMatrix*vec4(outPoint,1)).xyz;
                     vec3 v = normalize(position-wPoint);
-                    force += v*d*stiffness*10.0;
+                    force += v*d*stiffness*10.0; // FIXME: scale up force for easier visualize
                 }
 
                 gl_FragColor = vec4(force,1);
