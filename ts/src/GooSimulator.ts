@@ -1,20 +1,21 @@
-import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, FloatType, Group, InstancedMesh, LineBasicMaterial, LineSegments, MathUtils, Matrix4, Mesh, MeshStandardMaterial, NearestFilter, OrthographicCamera, PlaneGeometry, RGBADepthPacking, RGBAFormat, RedFormat, SphereGeometry, Vector2, Vector3, WebGLRenderTarget, WebGLRenderer } from "three";
-import { FloatVertexAttributeTexture, HitTriangleInfo, MeshBVH, MeshBVHUniformStruct, getTriangleHitPointInfo } from "three-mesh-bvh";
+import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, Color, FloatType, Group, InstancedMesh, LineBasicMaterial, LineSegments, MathUtils, Matrix4, Mesh, NearestFilter, PlaneGeometry, RGBADepthPacking, RGBAFormat, RedFormat, SphereGeometry, Vector2, Vector3, WebGLRenderTarget, WebGLRenderer } from "three";
+import { HitTriangleInfo, MeshBVH, MeshBVHUniformStruct, getTriangleHitPointInfo } from "three-mesh-bvh";
 import { SDFGenerator } from "./SDFGenerator.js";
 import { MarchingDepthMaterial, MarchingMaterial } from "./MarchingMaterial.js";
 import { InitPositionMaterial } from "./material/InitPositionMaterial.js";
-import { render } from "react-dom";
 import { FullScreenQuad } from "three/examples/jsm/Addons";
 import { UpdateForceMaterial } from "./material/UpdateForceMaterial.js";
 import { UpdateVelocityMaterial } from "./material/UpdateVelocityMaterial.js";
 import { UpdatePositionMaterial } from "./material/UpdatePositionMaterial.js";
 import { ParticleMaterial } from "./material/ParticleMaterial.js";
+import { BvhCollisionMaterial } from "./material/BvhCollisionMaterial.js";
 
 const v1 = new Vector3
 const v2 = new Vector3
 const m1 = new Matrix4
 
 const _v1 = new Vector3
+const _c1 = new Color
 
 interface Particle {
     index: number
@@ -93,6 +94,7 @@ const initPositionMaterial = new InitPositionMaterial()
 const updateForceMaterial = new UpdateForceMaterial()
 const updateVelocityMaterial = new UpdateVelocityMaterial()
 const updatePositionMaterial = new UpdatePositionMaterial()
+const bvhCollisionMaterial = new BvhCollisionMaterial()
 
 export class GooSimulator extends Group {
 
@@ -102,6 +104,7 @@ export class GooSimulator extends Group {
         velocity: WebGLRenderTarget
         force: WebGLRenderTarget
     }
+
     private particles: Particle[]
     private links: Map<number, ParticlePair> = new Map
     private surfaceLinks: Map<number, ParticleToSurfaceLink> = new Map
@@ -114,7 +117,6 @@ export class GooSimulator extends Group {
         mesh: Mesh
         bvh: MeshBVH
         bvhUniform: MeshBVHUniformStruct
-        normalAttributeTexture: FloatVertexAttributeTexture
     }[]
 
     private sdfRendertarget: WebGLRenderTarget
@@ -159,7 +161,6 @@ export class GooSimulator extends Group {
             })
         }
         this.initParticle(renderer)
-
         
         this.particles = new Array(particleCount)
         this.grid = new Array(gridSize*gridSize*gridSize)
@@ -167,15 +168,13 @@ export class GooSimulator extends Group {
             const bvh = new MeshBVH(m.geometry)
             const bvhUniform = new MeshBVHUniformStruct()
             bvhUniform.updateFrom(bvh)
-            const normalAttributeTexture = new FloatVertexAttributeTexture()
-            normalAttributeTexture.updateFrom(m.geometry.attributes.normal as BufferAttribute)
             return {
                 mesh: m,
                 bvh: bvh,
-                bvhUniform: bvhUniform,
-                normalAttributeTexture: normalAttributeTexture
+                bvhUniform: bvhUniform
             }
         })
+
         const sdfRenderTargetWidth = MathUtils.ceilPowerOfTwo(Math.pow(gridSize,3/2))
         this.sdfRendertarget = new WebGLRenderTarget(sdfRenderTargetWidth,sdfRenderTargetWidth, {
             format: RedFormat,
@@ -214,7 +213,7 @@ export class GooSimulator extends Group {
             particleCount
         )
         instancedMesh.frustumCulled = false
-        instancedMesh.castShadow = true
+        instancedMesh.castShadow = false
         instancedMesh.receiveShadow = true
         group.add(instancedMesh)
 
@@ -285,17 +284,20 @@ export class GooSimulator extends Group {
             rendertarget: renderer.getRenderTarget(),
             activeCubeFace: renderer.getActiveCubeFace(),
             activeMipmapLevel: renderer.getActiveMipmapLevel(),
-            autoClear: renderer.autoClear
+            autoClear: renderer.autoClear,
+            clearColor: renderer.getClearColor(_c1),
+            clearAlpha: renderer.getClearAlpha()
         }
 
         while( this.deltaTime>fixedTimeStep ){
             this.simulateGPU( fixedTimeStep, renderer )
-            this.simulate( fixedTimeStep )
+            // this.simulate( fixedTimeStep )
             this.deltaTime -= fixedTimeStep
             simulationRun = true
         }
 
         renderer.setRenderTarget(restore.rendertarget,restore.activeCubeFace,restore.activeMipmapLevel)
+        renderer.setClearColor(restore.clearColor,restore.clearAlpha)
         renderer.autoClear = restore.autoClear
 
         if( simulationRun ){
@@ -316,6 +318,7 @@ export class GooSimulator extends Group {
             sdfGenerator.generate(
                 renderer,
                 this.sdfRendertarget,
+
                 this.gridSize,
                 gridCellSize,
                 this.particles,
@@ -335,16 +338,32 @@ export class GooSimulator extends Group {
 
     private simulateGPU( deltaTime: number, renderer: WebGLRenderer ){
 
+        // update force
         renderer.autoClear = true
+        renderer.setClearColor(0,0)
+
+        renderer.setRenderTarget( this.particleRendertargets.force )
+        bvhCollisionMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
+        bvhCollisionMaterial.uniforms.radius.value = radius
+        bvhCollisionMaterial.uniforms.stiffness.value = stiffness        
+        fsquad.material = bvhCollisionMaterial
+        for( let i=0; i<this.colliders.length; i++ ){
+            const collider = this.colliders[i]
+            bvhCollisionMaterial.uniforms.bvh.value = collider.bvhUniform
+            bvhCollisionMaterial.uniforms.bvhMatrix.value = collider.mesh.matrixWorld
+            fsquad.render(renderer)
+        }
+
+        renderer.autoClear = false
 
         updateForceMaterial.uniforms.tVel.value = this.particleRendertargets.velocity.texture
         updateForceMaterial.uniforms.particleMass.value = particleMass
         updateForceMaterial.uniforms.gravity.value.copy( gravity )
         updateForceMaterial.uniforms.dampingFactor.value = dampingFactor        
         fsquad.material = updateForceMaterial
-        renderer.setRenderTarget( this.particleRendertargets.force )
         fsquad.render(renderer)
 
+        // update veolocity
         renderer.autoClear = false
 
         updateVelocityMaterial.uniforms.deltaTime.value = deltaTime
@@ -353,6 +372,7 @@ export class GooSimulator extends Group {
         renderer.setRenderTarget( this.particleRendertargets.velocity )
         fsquad.render(renderer)
 
+        // update position
         updatePositionMaterial.uniforms.deltaTime.value = deltaTime
         updatePositionMaterial.uniforms.tVel.value = this.particleRendertargets.velocity.texture
         fsquad.material = updatePositionMaterial

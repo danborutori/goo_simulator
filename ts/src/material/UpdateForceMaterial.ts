@@ -1,4 +1,4 @@
-import { NoBlending, ShaderMaterial, Vector3 } from "three";
+import { AdditiveBlending, ShaderMaterial, Vector3 } from "three";
 
 export class UpdateForceMaterial extends ShaderMaterial {
 
@@ -36,8 +36,8 @@ export class UpdateForceMaterial extends ShaderMaterial {
                     gl_FragColor = vec4(force,1);
                 }
             `,
-            transparent: false,
-            blending: NoBlending
+            transparent: true,
+            blending: AdditiveBlending
         })
     }
 }
