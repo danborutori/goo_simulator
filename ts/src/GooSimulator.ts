@@ -185,6 +185,86 @@ function createLinkMesh(
     return mesh
 }
 
+function createSurfaceLinkMesh(
+    particleCount: number,
+    particleRendertargetWidth: number,
+    tPosition: IUniform,
+    tSurfaceLink: IUniform,
+    collders: Mesh[]
+){
+    const g = new BufferGeometry()
+
+    const position = new BufferAttribute( new Float32Array(particleCount*3*8), 3)
+    const uv = new BufferAttribute( new Float32Array(particleCount*2*8), 2)
+    const linkIndex = new BufferAttribute( new Int32Array(particleCount*8), 1)
+
+    for( let i=0; i<particleCount; i++ ){
+        v2_1.set(
+            i%particleRendertargetWidth,
+            Math.floor(i/particleRendertargetWidth)
+        ).addScalar(0.5).divideScalar(particleRendertargetWidth)
+        for( let j=0; j<8; j++ )
+            uv.setXY(i*8+j,v2_1.x,v2_1.y)
+        linkIndex.setX(i*8,-1)
+        linkIndex.setX(i*8+1,0)
+        linkIndex.setX(i*8+2,-1)
+        linkIndex.setX(i*8+3,1)
+        linkIndex.setX(i*8+4,-1)
+        linkIndex.setX(i*8+5,2)
+        linkIndex.setX(i*8+6,-1)
+        linkIndex.setX(i*8+7,3)
+    }
+
+    g.setAttribute("position", position)
+    g.setAttribute("uv", uv)
+    g.setAttribute("linkIndex", linkIndex)
+
+    const material = new LineBasicMaterial({
+        color: 0xffff00
+    })
+
+    const defines = material.defines || (material.defines = {})
+    defines.NUM_BVH = collders.length
+
+    material.onBeforeCompile = shader=>{
+        shader.uniforms.tPosition = tPosition
+        shader.uniforms.tSurfaceLink = tSurfaceLink
+        shader.uniforms.bvhMatrix = { value: collders.map(m=>m.matrixWorld) }
+
+        shader.vertexShader = `
+        uniform sampler2D tPosition;
+        uniform sampler2D tSurfaceLink[4];
+        uniform mat4 bvhMatrix[NUM_BVH];
+
+        attribute int linkIndex;
+        `+shader.vertexShader.replace(
+            "void main() {",
+            `
+            void main() {
+                vec3 position = texture2D( tPosition, uv ).xyz;                
+                if( linkIndex>=0 ){
+                    vec4 surfaceLinks[4] = vec4[4](
+                        texture2D( tSurfaceLink[ 0 ], uv ),
+                        texture2D( tSurfaceLink[ 1 ], uv ),
+                        texture2D( tSurfaceLink[ 2 ], uv ),
+                        texture2D( tSurfaceLink[ 3 ], uv )
+                    );
+                    vec4 surfaceLink = surfaceLinks[ linkIndex ];
+                    int id = int( surfaceLink.w );
+                    if( id>=0 ){
+                        position = (bvhMatrix[id]*vec4(surfaceLink.xyz,1)).xyz;
+                    }
+                }
+
+            `
+        )
+    }
+
+    const mesh = new LineSegments(g, material)
+
+    return mesh
+}
+
 const fsquad = new FullScreenQuad()
 const initPositionMaterial = new InitPositionMaterial()
 const updateForceMaterial = new UpdateForceMaterial()
@@ -229,7 +309,8 @@ export class GooSimulator extends Group {
 
     private sdfRendertarget: WebGLRenderTarget
     private uniforms = {
-        tLink: { value: null } as IUniform<Texture | null>
+        tLink: { value: null } as IUniform<Texture | null>,
+        tSurfaceLink: { value: null } as IUniform<Texture[] | null>
     }
     private bvhCollisionMaterial: BvhCollisionMaterial
     private applyLinkForceMaterial: ApplyLinkForceMaterial
@@ -396,9 +477,13 @@ export class GooSimulator extends Group {
         this.linksLine.receiveShadow = false
         group.add(this.linksLine)
 
-        this.surfaceLinkLine = new LineSegments( new BufferGeometry(), new LineBasicMaterial({
-            color: 0xffff00
-        }))
+        this.surfaceLinkLine = createSurfaceLinkMesh(
+            particleCount,
+            particleRendertargetWidth,
+            { value: this.particleRendertargets.position.texture },
+            this.uniforms.tSurfaceLink,
+            colliders
+        )
         this.surfaceLinkLine.frustumCulled = false
         this.surfaceLinkLine.castShadow = true
         this.surfaceLinkLine.receiveShadow = false
@@ -472,7 +557,6 @@ export class GooSimulator extends Group {
         renderer.autoClear = restore.autoClear
 
         if( simulationRun ){
-            this.updateSurfaceLines()
             for( let l of this.links ){
                 const pair = _vectorPairCache.pop() || {a: new Vector3, b: new Vector3}
                 pair.a.copy(l[1].a.position)
@@ -507,38 +591,6 @@ export class GooSimulator extends Group {
     }
 
     private simulateGPU( deltaTime: number, renderer: WebGLRenderer ){
-
-        // update link
-        renderer.autoClear = true
-        renderer.setClearColor(-1,-1)
-        updateLinkMaterial.uniforms.tLink.value = this.particleRendertargets.read.link.texture
-        updateLinkMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
-        updateLinkMaterial.uniforms.formLinkDistance.value = formLinkDistance
-        updateLinkMaterial.uniforms.breakLinkDistance.value = breakLinkDistance
-        updateLinkMaterial.uniforms.tGrid.value = this.gridRenderTarget.texture
-        updateLinkMaterial.uniforms.gridSize.value = this.gridSize
-        updateLinkMaterial.uniforms.gridCellSize.value = gridCellSize
-        fsquad.material = updateLinkMaterial
-        renderer.setRenderTarget( this.particleRendertargets.write.link )
-        fsquad.render( renderer )
-
-        this.updateSurfaceLinkMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
-        this.updateSurfaceLinkMaterial.uniforms.tLinks.value = this.particleRendertargets.read.surfaceLink.texture
-        this.updateSurfaceLinkMaterial.uniforms.breakLinkDistance.value = breakLinkDistance
-        this.updateSurfaceLinkMaterial.uniforms.radius.value = radius
-        for( let i=0; i<this.colliders.length; i++ ){
-            const collider = this.colliders[i]
-            this.updateSurfaceLinkMaterial.uniforms.bvhMatrix.value[i] = collider.mesh.matrixWorld
-            this.updateSurfaceLinkMaterial.uniforms[`bvh${i}`].value = collider.bvhUniform
-        }
-        fsquad.material = this.updateSurfaceLinkMaterial
-        renderer.setRenderTarget(this.particleRendertargets.write.surfaceLink)
-        fsquad.render(renderer)
-
-        const tmp = this.particleRendertargets.write
-        this.particleRendertargets.write = this.particleRendertargets.read
-        this.particleRendertargets.read = tmp
-        this.uniforms.tLink.value = this.particleRendertargets.read.link.texture
 
         // update force
         renderer.autoClear = true
@@ -611,6 +663,40 @@ export class GooSimulator extends Group {
         renderer.setClearColor(0,0)
         renderer.setRenderTarget( this.gridRenderTarget )
         renderer.render( this.particleInstancedMesh, dummyCamera )
+
+        // update link
+        renderer.autoClear = true
+        renderer.setClearColor(-1,-1)
+        updateLinkMaterial.uniforms.tLink.value = this.particleRendertargets.read.link.texture
+        updateLinkMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
+        updateLinkMaterial.uniforms.formLinkDistance.value = formLinkDistance
+        updateLinkMaterial.uniforms.breakLinkDistance.value = breakLinkDistance
+        updateLinkMaterial.uniforms.tGrid.value = this.gridRenderTarget.texture
+        updateLinkMaterial.uniforms.gridSize.value = this.gridSize
+        updateLinkMaterial.uniforms.gridCellSize.value = gridCellSize
+        fsquad.material = updateLinkMaterial
+        renderer.setRenderTarget( this.particleRendertargets.write.link )
+        fsquad.render( renderer )
+
+        this.updateSurfaceLinkMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
+        this.updateSurfaceLinkMaterial.uniforms.tLinks.value = this.particleRendertargets.read.surfaceLink.texture
+        this.updateSurfaceLinkMaterial.uniforms.breakLinkDistance.value = breakLinkDistance
+        this.updateSurfaceLinkMaterial.uniforms.radius.value = radius
+        for( let i=0; i<this.colliders.length; i++ ){
+            const collider = this.colliders[i]
+            this.updateSurfaceLinkMaterial.uniforms.bvhMatrix.value[i] = collider.mesh.matrixWorld
+            this.updateSurfaceLinkMaterial.uniforms[`bvh${i}`].value = collider.bvhUniform
+        }
+        fsquad.material = this.updateSurfaceLinkMaterial
+        renderer.setRenderTarget(this.particleRendertargets.write.surfaceLink)
+        fsquad.render(renderer)
+
+        const tmp = this.particleRendertargets.write
+        this.particleRendertargets.write = this.particleRendertargets.read
+        this.particleRendertargets.read = tmp
+        this.uniforms.tLink.value = this.particleRendertargets.read.link.texture
+        this.uniforms.tSurfaceLink.value = this.particleRendertargets.read.surfaceLink.texture
+        
     }
 
     private simulate( deltaTime: number ){
@@ -823,36 +909,5 @@ export class GooSimulator extends Group {
                 p.position.y = 4+(i++)*radius
             }
         }
-    }
-
-    private updateSurfaceLines(){
-        const g = this.surfaceLinkLine.geometry
-
-        let position = g.attributes.position
-        if( !position || position.count<this.surfaceLinks.size*2 ){
-            position = new BufferAttribute(new Float32Array(this.surfaceLinks.size*6), 3)
-            g.setAttribute("position",position)
-        }
-        let i = 0
-        for( let e of this.surfaceLinks ){
-            const l = e[1]
-            v1.copy(l.point)
-            .applyMatrix4(l.mesh.matrixWorld)
-            .toArray( position.array, i*6 )
-            l.particle.position.toArray( position.array, i*6+3 )
-            i++
-        }
-        position.needsUpdate = true
-
-        let index = g.index
-        if( !index || index.array.length<this.surfaceLinks.size*2 ){
-            index = new BufferAttribute( new Uint16Array(this.surfaceLinks.size*2), 1 )
-            for( let i=0; i<index.count; i++ ){
-                index.setX(i,i)
-            }
-            index.needsUpdate = true
-            g.setIndex(index)
-        }
-        (index as any).count = this.surfaceLinks.size*2
     }
 }
