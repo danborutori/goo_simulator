@@ -17,7 +17,6 @@ import { UpdateSurfaceLinkMaterial } from "./material/UpdateSurfaceLinkMaterial.
 
 const v2_1 = new Vector2
 
-const _v1 = new Vector3
 const _c1 = new Color
 
 const particleMass = 0.1
@@ -250,7 +249,6 @@ export class GooSimulator extends Group {
     private deltaTime = 0
     private colliders: {
         mesh: Mesh
-        bvh: MeshBVH
         bvhUniform: MeshBVHUniformStruct
     }[]
 
@@ -364,7 +362,6 @@ export class GooSimulator extends Group {
             bvhUniform.updateFrom(bvh)
             return {
                 mesh: m,
-                bvh: bvh,
                 bvhUniform: bvhUniform
             }
         })
@@ -499,11 +496,6 @@ export class GooSimulator extends Group {
                 radius
             )
         }
-    }
-
-    gridIndexFromPosition( v: Vector3 ){
-        _v1.copy(v).divideScalar(gridCellSize).floor().addScalar(this.gridSize/2).clampScalar(0,this.gridSize-1)
-        return _v1.x+_v1.y*this.gridSize+_v1.z*this.gridSize*this.gridSize
     }
 
     private simulate( deltaTime: number, renderer: WebGLRenderer ){
