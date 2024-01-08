@@ -234,7 +234,7 @@ export class UpdateMaterial extends ShaderMaterial {
                     );
                     distance *= side;
 
-                    if( distance<localSpaceRadius ){
+                    if( abs(distance)<localSpaceRadius && distance<localSpaceRadius ){
                         outputLinks[curLinkId++] = vec4(
                             outPoint,
                             UNROLLED_LOOP_INDEX.0
