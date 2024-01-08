@@ -4,16 +4,8 @@ import { SDFGenerator } from "./SDFGenerator.js";
 import { MarchingDepthMaterial, MarchingMaterial } from "./MarchingMaterial.js";
 import { InitMaterial } from "./material/InitMaterial.js";
 import { FullScreenQuad } from "three/examples/jsm/Addons";
-import { UpdateForceMaterial } from "./material/UpdateForceMaterial.js";
-import { UpdateVelocityMaterial } from "./material/UpdateVelocityMaterial.js";
-import { UpdatePositionMaterial } from "./material/UpdatePositionMaterial.js";
 import { ParticleMaterial } from "./material/ParticleMaterial.js";
-import { BvhCollisionMaterial } from "./material/BvhCollisionMaterial.js";
 import { UpdateGridMaterial } from "./material/UpdateGridMaterial.js";
-import { ParticleToParticleCollisionMaterial } from "./material/ParticleToParticleCollisionMaterial.js";
-import { UpdateLinkMaterial } from "./material/UpdateLinkMaterial.js";
-import { ApplyLinkForceMaterial } from "./material/ApplyLinkForceMaterial.js";
-import { UpdateSurfaceLinkMaterial } from "./material/UpdateSurfaceLinkMaterial.js";
 import { UpdateMaterial } from "./material/UpdateMaterial.js";
 
 const v2_1 = new Vector2
