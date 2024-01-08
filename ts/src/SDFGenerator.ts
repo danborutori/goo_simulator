@@ -311,10 +311,10 @@ function setupScene(
     if(segmentsGeometry.attributes.instanceId!==instanceId){
         segmentsGeometry.setAttribute("instanceId", instanceId )
     }
-    if( segments.instanceMatrix.count<particleCount*4 ){
-        segments.instanceMatrix = new InstancedBufferAttribute( new Float32Array(16*particleCount*4), 16)
+    if( segments.instanceMatrix.count<particleCount ){
+        segments.instanceMatrix = new InstancedBufferAttribute( new Float32Array(16*particleCount), 16)
     }
-    segments.count = particleCount*4
+    segments.count = particleCount
 }
 
 export class SDFGenerator {
