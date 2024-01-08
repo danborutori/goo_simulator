@@ -161,19 +161,20 @@ function createLinkMesh(
             "void main() {",
             `
             void main() {
-                vec3 position = texture2D( tPosition, uv ).xyz;
+                vec2 pointUv = uv;
+
                 if( linkIndex>=0 ){
                     float id = texture2D( tLink, uv )[linkIndex];
                     if( id>=0.0 ){
                         vec2 tPositionSize = vec2(textureSize( tPosition, 0 ));
-                        vec2 uv = (vec2(
+                        pointUv = (vec2(
                             mod( id, tPositionSize.x ),
                             floor( id/tPositionSize.x )
                         )+0.5)/tPositionSize;
-
-                        position = texture2D( tPosition, uv ).xyz;
                     }
                 }
+
+                vec3 position = texture2D( tPosition, pointUv ).xyz;
             `
         )
     }
@@ -188,7 +189,6 @@ const initPositionMaterial = new InitPositionMaterial()
 const updateForceMaterial = new UpdateForceMaterial()
 const updateVelocityMaterial = new UpdateVelocityMaterial()
 const updatePositionMaterial = new UpdatePositionMaterial()
-const bvhCollisionMaterial = new BvhCollisionMaterial()
 const updateGridMaterial = new UpdateGridMaterial()
 const particleToParticleCollisionMaterial = new ParticleToParticleCollisionMaterial()
 const updateLinkMaterial = new UpdateLinkMaterial()
@@ -229,6 +229,7 @@ export class GooSimulator extends Group {
     private uniforms = {
         tLink: { value: null } as IUniform<Texture | null>
     }
+    private bvhCollisionMaterial: BvhCollisionMaterial
 
     constructor(
         renderer: WebGLRenderer,
@@ -237,6 +238,8 @@ export class GooSimulator extends Group {
         readonly gridSize: number = 256
     ){
         super()
+
+        this.bvhCollisionMaterial = new BvhCollisionMaterial(colliders.length)
 
         const particleRendertargetWidth = MathUtils.ceilPowerOfTwo(Math.sqrt(particleCount))
         this.particleInstancedMesh = createInstancedMesh(particleCount,particleRendertargetWidth)
@@ -521,16 +524,16 @@ export class GooSimulator extends Group {
         fsquad.material = particleToParticleCollisionMaterial
         fsquad.render(renderer)
 
-        bvhCollisionMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
-        bvhCollisionMaterial.uniforms.radius.value = radius
-        bvhCollisionMaterial.uniforms.stiffness.value = stiffness        
-        fsquad.material = bvhCollisionMaterial
+        this.bvhCollisionMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
+        this.bvhCollisionMaterial.uniforms.radius.value = radius
+        this.bvhCollisionMaterial.uniforms.stiffness.value = stiffness        
         for( let i=0; i<this.colliders.length; i++ ){
             const collider = this.colliders[i]
-            bvhCollisionMaterial.uniforms.bvh.value = collider.bvhUniform
-            bvhCollisionMaterial.uniforms.bvhMatrix.value = collider.mesh.matrixWorld
-            fsquad.render(renderer)
+            this.bvhCollisionMaterial.uniforms[`bvh${i}`].value = collider.bvhUniform
+            this.bvhCollisionMaterial.uniforms.bvhMatrix.value[ i ] = collider.mesh.matrixWorld
         }
+        fsquad.material = this.bvhCollisionMaterial
+        fsquad.render(renderer)
 
         updateForceMaterial.uniforms.tVel.value = this.particleRendertargets.velocity.texture
         updateForceMaterial.uniforms.particleMass.value = particleMass

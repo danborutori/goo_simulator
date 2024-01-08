@@ -1,17 +1,28 @@
-import { AdditiveBlending, ShaderMaterial } from "three";
+import { AdditiveBlending, IUniform, ShaderMaterial } from "three";
 import { shaderDistanceFunction, shaderIntersectFunction, shaderStructs } from "three-mesh-bvh";
 
 export class BvhCollisionMaterial extends ShaderMaterial {
 
-    constructor(){
+    constructor(
+        numBvh: number
+    ){
+
+        const uniforms: {[key:string]: IUniform} = {
+            tPosition: { value: null },
+            radius: { value: 0 },
+            stiffness: { value: 0 },
+            bvhMatrix: { value: new Array(numBvh) }
+        }
+
+        for( let i=0; i<numBvh; i++ ){
+            uniforms[`bvh${i}`] = { value: null }
+        }
+
         super({
-            uniforms: {
-                tPosition: { value: null },
-                radius: { value: 0 },
-                stiffness: { value: 0 },
-                bvh: { value: null },
-                bvhMatrix: { value: null }
+            defines: {
+                NUM_BVH: numBvh
             },
+            uniforms: uniforms,
             vertexShader: `
             varying vec2 vUv;
 
@@ -30,49 +41,66 @@ export class BvhCollisionMaterial extends ShaderMaterial {
             uniform sampler2D tPosition;
             uniform float radius;   
             uniform float stiffness;
-            uniform BVH bvh;
-            uniform mat4 bvhMatrix;
+            ${
+                (function(){
+                    let s = ""
+                    for( let i=0; i<numBvh; i++ ){
+                        s += `uniform BVH bvh${i};`
+                    }
+                    return s
+                })()
+            }
+            uniform mat4 bvhMatrix[NUM_BVH];
 
             varying vec2 vUv;
 
             void main(){
                 vec3 position = texture2D( tPosition, vUv ).xyz;
                 vec3 force = vec3(0,0,0);
-                
-                mat4 bvhMatrixInv = inverse(bvhMatrix);
-                vec3 localPosition = (bvhMatrixInv*vec4(position,1)).xyz;
-                float scale = max(
-                    length(bvhMatrixInv[0].xyz),
-                    max(
-                        length(bvhMatrixInv[1].xyz),
-                        length(bvhMatrixInv[2].xyz)
-                    )
-                );
-                float localSpaceRadius = radius*scale;
 
+                mat4 bvhMatrixInv;
+                vec3 localPosition;
+                float scale;
+                float localSpaceRadius;
                 uvec4 faceIndices;
                 vec3 faceNormal;
                 vec3 barycoord;
                 float side = 1.0;
                 vec3 outPoint;
-                float distance = bvhClosestPointToPoint(
-                    bvh, localPosition,
-                    faceIndices, 
-                    faceNormal, 
-                    barycoord,
-                    side,
-                    outPoint
-                );
-                distance *= side;
+                float distance;
+                #pragma unroll_loop_start 
+                for ( int i = 0; i < ${numBvh}; i ++ ) {                    
+                    bvhMatrixInv = inverse(bvhMatrix[ i ]);
+                    localPosition = (bvhMatrixInv*vec4(position,1)).xyz;
+                    scale = max(
+                        length(bvhMatrixInv[0].xyz),
+                        max(
+                            length(bvhMatrixInv[1].xyz),
+                            length(bvhMatrixInv[2].xyz)
+                        )
+                    );
+                    localSpaceRadius = radius*scale;
 
-                if( distance<localSpaceRadius ){
-                    // transform to world space
-                    distance /= scale;
-                    float d = radius-distance;
-                    vec3 wPoint = (bvhMatrix*vec4(outPoint,1)).xyz;
-                    vec3 v = normalize(position-wPoint);
-                    force += v*d*stiffness*2.0; // FIXME: scale up force for easier visualize
+                    distance = bvhClosestPointToPoint(
+                        bvhUNROLLED_LOOP_INDEX, localPosition,
+                        faceIndices, 
+                        faceNormal, 
+                        barycoord,
+                        side,
+                        outPoint
+                    );
+                    distance *= side;
+
+                    if( distance<localSpaceRadius ){
+                        // transform to world space
+                        distance /= scale;
+                        float d = radius-distance;
+                        vec3 wPoint = (bvhMatrix[ i ]*vec4(outPoint,1)).xyz;
+                        vec3 v = normalize(position-wPoint);
+                        force += v*d*stiffness*2.0; // FIXME: scale up force for easier visualize
+                    }
                 }
+                #pragma unroll_loop_end
 
                 gl_FragColor = vec4(force,1);
             }
