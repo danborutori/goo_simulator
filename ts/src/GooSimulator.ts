@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, Color, FloatType, Group, IUniform, InstancedBufferAttribute, InstancedMesh, LineBasicMaterial, LineSegments, MathUtils, Matrix4, Mesh, NearestFilter, OrthographicCamera, PlaneGeometry, RGBADepthPacking, RGBAFormat, RedFormat, SphereGeometry, Texture, Vector2, Vector3, WebGLRenderTarget, WebGLRenderer } from "three";
+import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, Color, FloatType, Group, IUniform, InstancedBufferAttribute, InstancedMesh, LineBasicMaterial, LineSegments, MathUtils, Matrix4, Mesh, NearestFilter, OrthographicCamera, PlaneGeometry, RGBADepthPacking, RGBAFormat, RedFormat, SphereGeometry, Texture, Vector2, Vector3, WebGLMultipleRenderTargets, WebGLRenderTarget, WebGLRenderer } from "three";
 import { HitTriangleInfo, MeshBVH, MeshBVHUniformStruct, getTriangleHitPointInfo } from "three-mesh-bvh";
 import { SDFGenerator } from "./SDFGenerator.js";
 import { MarchingDepthMaterial, MarchingMaterial } from "./MarchingMaterial.js";
@@ -13,6 +13,7 @@ import { UpdateGridMaterial } from "./material/UpdateGridMaterial.js";
 import { ParticleToParticleCollisionMaterial } from "./material/ParticleToParticleCollisionMaterial.js";
 import { UpdateLinkMaterial } from "./material/UpdateLinkMaterial.js";
 import { ApplyLinkForceMaterial } from "./material/ApplyLinkForceMaterial.js";
+import { UpdateSurfaceLinkMaterial } from "./material/UpdateSurfaceLinkMaterial.js";
 
 const v1 = new Vector3
 const v2 = new Vector3
@@ -203,9 +204,11 @@ export class GooSimulator extends Group {
         force: WebGLRenderTarget
         read: {
             link: WebGLRenderTarget
+            surfaceLink: WebGLMultipleRenderTargets
         },
         write: {
             link: WebGLRenderTarget
+            surfaceLink: WebGLMultipleRenderTargets
         }
     }
     private particleInstancedMesh: InstancedMesh
@@ -230,6 +233,7 @@ export class GooSimulator extends Group {
         tLink: { value: null } as IUniform<Texture | null>
     }
     private bvhCollisionMaterial: BvhCollisionMaterial
+    private updateSurfaceLinkMaterial: UpdateSurfaceLinkMaterial
 
     constructor(
         renderer: WebGLRenderer,
@@ -240,6 +244,7 @@ export class GooSimulator extends Group {
         super()
 
         this.bvhCollisionMaterial = new BvhCollisionMaterial(colliders.length)
+        this.updateSurfaceLinkMaterial = new UpdateSurfaceLinkMaterial(colliders.length)
 
         const particleRendertargetWidth = MathUtils.ceilPowerOfTwo(Math.sqrt(particleCount))
         this.particleInstancedMesh = createInstancedMesh(particleCount,particleRendertargetWidth)
@@ -280,10 +285,28 @@ export class GooSimulator extends Group {
                     generateMipmaps: false,
                     wrapS: ClampToEdgeWrapping,
                     wrapT: ClampToEdgeWrapping
+                }),
+                surfaceLink: new WebGLMultipleRenderTargets( particleRendertargetWidth, particleRendertargetWidth, 4, {
+                    format: RGBAFormat,
+                    type: FloatType,
+                    minFilter: NearestFilter,
+                    magFilter: NearestFilter,
+                    generateMipmaps: false,
+                    wrapS: ClampToEdgeWrapping,
+                    wrapT: ClampToEdgeWrapping
                 })
             },
             write: {
                 link: new WebGLRenderTarget(particleRendertargetWidth,particleRendertargetWidth,{
+                    format: RGBAFormat,
+                    type: FloatType,
+                    minFilter: NearestFilter,
+                    magFilter: NearestFilter,
+                    generateMipmaps: false,
+                    wrapS: ClampToEdgeWrapping,
+                    wrapT: ClampToEdgeWrapping
+                }),
+                surfaceLink: new WebGLMultipleRenderTargets( particleRendertargetWidth, particleRendertargetWidth, 4, {
                     format: RGBAFormat,
                     type: FloatType,
                     minFilter: NearestFilter,
@@ -497,6 +520,20 @@ export class GooSimulator extends Group {
         fsquad.material = updateLinkMaterial
         renderer.setRenderTarget( this.particleRendertargets.write.link )
         fsquad.render( renderer )
+
+        this.updateSurfaceLinkMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
+        this.updateSurfaceLinkMaterial.uniforms.tLinks.value = this.particleRendertargets.read.surfaceLink.texture
+        this.updateSurfaceLinkMaterial.uniforms.breakLinkDistance.value = breakLinkDistance
+        this.updateSurfaceLinkMaterial.uniforms.radius.value = radius
+        for( let i=0; i<this.colliders.length; i++ ){
+            const collider = this.colliders[i]
+            this.updateSurfaceLinkMaterial.uniforms.bvhMatrix.value[i] = collider.mesh.matrixWorld
+            this.updateSurfaceLinkMaterial.uniforms[`bvh${i}`].value = collider.bvhUniform
+        }
+        fsquad.material = this.updateSurfaceLinkMaterial
+        renderer.setRenderTarget(this.particleRendertargets.write.surfaceLink)
+        fsquad.render(renderer)
+
         const tmp = this.particleRendertargets.write
         this.particleRendertargets.write = this.particleRendertargets.read
         this.particleRendertargets.read = tmp
