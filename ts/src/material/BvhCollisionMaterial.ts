@@ -97,7 +97,7 @@ export class BvhCollisionMaterial extends ShaderMaterial {
                         float d = radius-distance;
                         vec3 wPoint = (bvhMatrix[ i ]*vec4(outPoint,1)).xyz;
                         vec3 v = normalize(position-wPoint);
-                        force += v*d*stiffness*2.0; // FIXME: scale up force for easier visualize
+                        force += v*d*stiffness;
                     }
                 }
                 #pragma unroll_loop_end

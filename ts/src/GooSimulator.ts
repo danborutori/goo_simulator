@@ -193,7 +193,6 @@ const updatePositionMaterial = new UpdatePositionMaterial()
 const updateGridMaterial = new UpdateGridMaterial()
 const particleToParticleCollisionMaterial = new ParticleToParticleCollisionMaterial()
 const updateLinkMaterial = new UpdateLinkMaterial()
-const applyLinkForceMaterial = new ApplyLinkForceMaterial()
 const dummyCamera = new OrthographicCamera()
 
 export class GooSimulator extends Group {
@@ -233,6 +232,7 @@ export class GooSimulator extends Group {
         tLink: { value: null } as IUniform<Texture | null>
     }
     private bvhCollisionMaterial: BvhCollisionMaterial
+    private applyLinkForceMaterial: ApplyLinkForceMaterial
     private updateSurfaceLinkMaterial: UpdateSurfaceLinkMaterial
 
     constructor(
@@ -244,6 +244,7 @@ export class GooSimulator extends Group {
         super()
 
         this.bvhCollisionMaterial = new BvhCollisionMaterial(colliders.length)
+        this.applyLinkForceMaterial = new ApplyLinkForceMaterial(colliders.length)
         this.updateSurfaceLinkMaterial = new UpdateSurfaceLinkMaterial(colliders.length)
 
         const particleRendertargetWidth = MathUtils.ceilPowerOfTwo(Math.sqrt(particleCount))
@@ -544,11 +545,15 @@ export class GooSimulator extends Group {
         renderer.setClearColor(0,0)
         renderer.setRenderTarget( this.particleRendertargets.force )
 
-        applyLinkForceMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
-        applyLinkForceMaterial.uniforms.tLink.value = this.particleRendertargets.read.link.texture
-        applyLinkForceMaterial.uniforms.formLinkDistance.value = formLinkDistance
-        applyLinkForceMaterial.uniforms.linkStrength.value = linkStrength
-        fsquad.material = applyLinkForceMaterial
+        this.applyLinkForceMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
+        this.applyLinkForceMaterial.uniforms.tLink.value = this.particleRendertargets.read.link.texture
+        this.applyLinkForceMaterial.uniforms.tLinks.value = this.particleRendertargets.read.surfaceLink.texture
+        for( let i=0; i<this.colliders.length; i++ ) this.applyLinkForceMaterial.uniforms.bvhMatrix.value[i] = this.colliders[i].mesh.matrixWorld
+        this.applyLinkForceMaterial.uniforms.formLinkDistance.value = formLinkDistance
+        this.applyLinkForceMaterial.uniforms.linkStrength.value = linkStrength
+        this.applyLinkForceMaterial.uniforms.stickyness.value = stickyness
+        this.applyLinkForceMaterial.uniforms.radius.value = radius
+        fsquad.material = this.applyLinkForceMaterial
         fsquad.render(renderer)
 
         renderer.autoClear = false
