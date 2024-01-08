@@ -21,7 +21,7 @@ const stickyness = 3
 const dampingFactor = 0.99
 const radius = 0.02
 const formLinkDistance = radius*2
-const breakLinkDistance = formLinkDistance*5
+const breakLinkDistance = formLinkDistance*8
 const fixedTimeStep = 1/60
 
 const gridCellSize = radius*2
