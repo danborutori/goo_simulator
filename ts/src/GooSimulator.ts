@@ -2,7 +2,7 @@ import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, Color, FloatType,
 import { MeshBVH, MeshBVHUniformStruct } from "three-mesh-bvh";
 import { SDFGenerator } from "./SDFGenerator.js";
 import { MarchingDepthMaterial, MarchingMaterial } from "./MarchingMaterial.js";
-import { InitPositionMaterial } from "./material/InitPositionMaterial.js";
+import { InitMaterial } from "./material/InitMaterial.js";
 import { FullScreenQuad } from "three/examples/jsm/Addons";
 import { UpdateForceMaterial } from "./material/UpdateForceMaterial.js";
 import { UpdateVelocityMaterial } from "./material/UpdateVelocityMaterial.js";
@@ -14,6 +14,7 @@ import { ParticleToParticleCollisionMaterial } from "./material/ParticleToPartic
 import { UpdateLinkMaterial } from "./material/UpdateLinkMaterial.js";
 import { ApplyLinkForceMaterial } from "./material/ApplyLinkForceMaterial.js";
 import { UpdateSurfaceLinkMaterial } from "./material/UpdateSurfaceLinkMaterial.js";
+import { UpdateMaterial } from "./material/UpdateMaterial.js";
 
 const v2_1 = new Vector2
 
@@ -218,29 +219,24 @@ function createSurfaceLinkMesh(
 }
 
 const fsquad = new FullScreenQuad()
-const initPositionMaterial = new InitPositionMaterial()
-const updateForceMaterial = new UpdateForceMaterial()
-const updateVelocityMaterial = new UpdateVelocityMaterial()
-const updatePositionMaterial = new UpdatePositionMaterial()
+const initMaterial = new InitMaterial()
 const updateGridMaterial = new UpdateGridMaterial()
-const particleToParticleCollisionMaterial = new ParticleToParticleCollisionMaterial()
-const updateLinkMaterial = new UpdateLinkMaterial()
 const dummyCamera = new OrthographicCamera()
 
 export class GooSimulator extends Group {
 
+    /*
+        0: position
+        1: velocity
+        2: link
+        3: surface link0
+        4: surface link1
+        5: surface link2
+        6: surface link3
+    */
     private particleRendertargets: {
-        position: WebGLRenderTarget
-        velocity: WebGLRenderTarget
-        force: WebGLRenderTarget
-        read: {
-            link: WebGLRenderTarget
-            surfaceLink: WebGLMultipleRenderTargets
-        },
-        write: {
-            link: WebGLRenderTarget
-            surfaceLink: WebGLMultipleRenderTargets
-        }
+        read: WebGLMultipleRenderTargets
+        write: WebGLMultipleRenderTargets
     }
     private particleInstancedMesh: InstancedMesh
     private gridRenderTarget: WebGLRenderTarget
@@ -254,12 +250,11 @@ export class GooSimulator extends Group {
 
     private sdfRendertarget: WebGLRenderTarget
     private uniforms = {
+        tPosition: { value: null } as IUniform<Texture | null>,
         tLink: { value: null } as IUniform<Texture | null>,
         tSurfaceLink: { value: null } as IUniform<Texture[] | null>
     }
-    private bvhCollisionMaterial: BvhCollisionMaterial
-    private applyLinkForceMaterial: ApplyLinkForceMaterial
-    private updateSurfaceLinkMaterial: UpdateSurfaceLinkMaterial
+    private updateMaterial: UpdateMaterial
 
     constructor(
         renderer: WebGLRenderer,
@@ -269,42 +264,12 @@ export class GooSimulator extends Group {
     ){
         super()
 
-        this.bvhCollisionMaterial = new BvhCollisionMaterial(colliders.length)
-        this.applyLinkForceMaterial = new ApplyLinkForceMaterial(colliders.length)
-        this.updateSurfaceLinkMaterial = new UpdateSurfaceLinkMaterial(colliders.length)
+        this.updateMaterial = new UpdateMaterial(colliders.length)
 
         const particleRendertargetWidth = MathUtils.ceilPowerOfTwo(Math.sqrt(particleCount))
         this.particleInstancedMesh = createInstancedMesh(particleCount,particleRendertargetWidth)
         this.particleRendertargets = {
-            position: new WebGLRenderTarget(particleRendertargetWidth,particleRendertargetWidth,{
-                format: RGBAFormat,
-                type: FloatType,
-                minFilter: NearestFilter,
-                magFilter: NearestFilter,
-                generateMipmaps: false,
-                wrapS: ClampToEdgeWrapping,
-                wrapT: ClampToEdgeWrapping
-            }),
-            velocity: new WebGLRenderTarget(particleRendertargetWidth,particleRendertargetWidth,{
-                format: RGBAFormat,
-                type: FloatType,
-                minFilter: NearestFilter,
-                magFilter: NearestFilter,
-                generateMipmaps: false,
-                wrapS: ClampToEdgeWrapping,
-                wrapT: ClampToEdgeWrapping
-            }),
-            force: new WebGLRenderTarget(particleRendertargetWidth,particleRendertargetWidth,{
-                format: RGBAFormat,
-                type: FloatType,
-                minFilter: NearestFilter,
-                magFilter: NearestFilter,
-                generateMipmaps: false,
-                wrapS: ClampToEdgeWrapping,
-                wrapT: ClampToEdgeWrapping
-            }),
-            read: {
-                link: new WebGLRenderTarget(particleRendertargetWidth,particleRendertargetWidth,{
+            read: new WebGLMultipleRenderTargets( particleRendertargetWidth, particleRendertargetWidth, 7, {
                     format: RGBAFormat,
                     type: FloatType,
                     minFilter: NearestFilter,
@@ -313,7 +278,7 @@ export class GooSimulator extends Group {
                     wrapS: ClampToEdgeWrapping,
                     wrapT: ClampToEdgeWrapping
                 }),
-                surfaceLink: new WebGLMultipleRenderTargets( particleRendertargetWidth, particleRendertargetWidth, 4, {
+            write: new WebGLMultipleRenderTargets( particleRendertargetWidth, particleRendertargetWidth, 7, {
                     format: RGBAFormat,
                     type: FloatType,
                     minFilter: NearestFilter,
@@ -322,27 +287,6 @@ export class GooSimulator extends Group {
                     wrapS: ClampToEdgeWrapping,
                     wrapT: ClampToEdgeWrapping
                 })
-            },
-            write: {
-                link: new WebGLRenderTarget(particleRendertargetWidth,particleRendertargetWidth,{
-                    format: RGBAFormat,
-                    type: FloatType,
-                    minFilter: NearestFilter,
-                    magFilter: NearestFilter,
-                    generateMipmaps: false,
-                    wrapS: ClampToEdgeWrapping,
-                    wrapT: ClampToEdgeWrapping
-                }),
-                surfaceLink: new WebGLMultipleRenderTargets( particleRendertargetWidth, particleRendertargetWidth, 4, {
-                    format: RGBAFormat,
-                    type: FloatType,
-                    minFilter: NearestFilter,
-                    magFilter: NearestFilter,
-                    generateMipmaps: false,
-                    wrapS: ClampToEdgeWrapping,
-                    wrapT: ClampToEdgeWrapping
-                })
-            }
         }
         this.initParticle(renderer)
         const gridRenderTargetWidth = MathUtils.ceilPowerOfTwo(Math.sqrt(gridSize*gridSize*gridSize))
@@ -382,7 +326,7 @@ export class GooSimulator extends Group {
         this.add( group )
 
         const particleMaterial = new ParticleMaterial()
-        particleMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
+        particleMaterial.uniforms.tPosition = this.uniforms.tPosition
         const instancedMesh = new InstancedMesh(
             new SphereGeometry(radius,8,4),
             particleMaterial,
@@ -396,7 +340,7 @@ export class GooSimulator extends Group {
         const linksLine = createLinkMesh(
             particleCount,
             particleRendertargetWidth,
-            {value: this.particleRendertargets.position.texture},
+            this.uniforms.tPosition,
             this.uniforms.tLink
         )
         linksLine.frustumCulled = false
@@ -407,7 +351,7 @@ export class GooSimulator extends Group {
         const surfaceLinkLine = createSurfaceLinkMesh(
             particleCount,
             particleRendertargetWidth,
-            { value: this.particleRendertargets.position.texture },
+            this.uniforms.tPosition,
             this.uniforms.tSurfaceLink,
             colliders
         )
@@ -445,11 +389,11 @@ export class GooSimulator extends Group {
             activeMipmapLevel: renderer.getActiveMipmapLevel()
         }
 
-        initPositionMaterial.uniforms.radius.value = radius
-        initPositionMaterial.uniforms.particleCount.value = this.particleCount
-        initPositionMaterial.uniforms.rendertargetWidth.value = this.particleRendertargets.position.width
-        fsquad.material = initPositionMaterial
-        renderer.setRenderTarget( this.particleRendertargets.position )
+        initMaterial.uniforms.radius.value = radius
+        initMaterial.uniforms.particleCount.value = this.particleCount
+        initMaterial.uniforms.rendertargetWidth.value = this.particleRendertargets.read.width
+        fsquad.material = initMaterial
+        renderer.setRenderTarget( this.particleRendertargets.read )
         fsquad.render(renderer)
 
         renderer.setRenderTarget(restore.rendertarget,restore.activeCubeFace,restore.activeMipmapLevel)
@@ -489,9 +433,9 @@ export class GooSimulator extends Group {
                 this.gridSize,
                 gridCellSize,
                 this.particleCount,
-                this.particleRendertargets.position.texture,
-                this.particleRendertargets.read.link.texture,
-                this.particleRendertargets.read.surfaceLink.texture,
+                this.particleRendertargets.read.texture[0],
+                this.particleRendertargets.read.texture[2],
+                this.particleRendertargets.read.texture.slice(3,7),
                 this.colliders,
                 radius
             )
@@ -501,68 +445,38 @@ export class GooSimulator extends Group {
     private simulate( deltaTime: number, renderer: WebGLRenderer ){
 
         // update force
-        renderer.autoClear = true
-        renderer.setClearColor(0,0)
-        renderer.setRenderTarget( this.particleRendertargets.force )
-
-        this.applyLinkForceMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
-        this.applyLinkForceMaterial.uniforms.tLink.value = this.particleRendertargets.read.link.texture
-        this.applyLinkForceMaterial.uniforms.tLinks.value = this.particleRendertargets.read.surfaceLink.texture
-        for( let i=0; i<this.colliders.length; i++ ) this.applyLinkForceMaterial.uniforms.bvhMatrix.value[i] = this.colliders[i].mesh.matrixWorld
-        this.applyLinkForceMaterial.uniforms.formLinkDistance.value = formLinkDistance
-        this.applyLinkForceMaterial.uniforms.linkStrength.value = linkStrength
-        this.applyLinkForceMaterial.uniforms.stickyness.value = stickyness
-        this.applyLinkForceMaterial.uniforms.radius.value = radius
-        fsquad.material = this.applyLinkForceMaterial
-        fsquad.render(renderer)
-
-        renderer.autoClear = false
-
-        particleToParticleCollisionMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
-        particleToParticleCollisionMaterial.uniforms.tGrid.value = this.gridRenderTarget.texture
-        particleToParticleCollisionMaterial.uniforms.gridSize.value = this.gridSize
-        particleToParticleCollisionMaterial.uniforms.gridCellSize.value = gridCellSize
-        particleToParticleCollisionMaterial.uniforms.radius.value = radius
-        fsquad.material = particleToParticleCollisionMaterial
-        fsquad.render(renderer)
-
-        this.bvhCollisionMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
-        this.bvhCollisionMaterial.uniforms.radius.value = radius
-        this.bvhCollisionMaterial.uniforms.stiffness.value = stiffness        
+        this.updateMaterial.uniforms.deltaTime.value = deltaTime
+        this.updateMaterial.uniforms.tInput.value = this.particleRendertargets.read.texture
+        this.updateMaterial.uniforms.radius.value = radius
+        this.updateMaterial.uniforms.formLinkDistance.value = formLinkDistance
+        this.updateMaterial.uniforms.breakLinkDistance.value = breakLinkDistance
+        this.updateMaterial.uniforms.linkStrength.value = linkStrength
+        this.updateMaterial.uniforms.stickyness.value = stickyness
+        this.updateMaterial.uniforms.stiffness.value = stiffness        
+        this.updateMaterial.uniforms.particleMass.value = particleMass
+        this.updateMaterial.uniforms.gravity.value.copy(gravity)
+        this.updateMaterial.uniforms.dampingFactor.value = dampingFactor
+        this.updateMaterial.uniforms.tGrid.value = this.gridRenderTarget.texture
+        this.updateMaterial.uniforms.gridSize.value = this.gridSize
+        this.updateMaterial.uniforms.gridCellSize.value = gridCellSize
         for( let i=0; i<this.colliders.length; i++ ){
-            const collider = this.colliders[i]
-            this.bvhCollisionMaterial.uniforms[`bvh${i}`].value = collider.bvhUniform
-            this.bvhCollisionMaterial.uniforms.bvhMatrix.value[ i ] = collider.mesh.matrixWorld
-        }
-        fsquad.material = this.bvhCollisionMaterial
+            this.updateMaterial.uniforms[`bvh${i}`].value = this.colliders[i].bvhUniform
+            this.updateMaterial.uniforms.bvhMatrix.value[i] = this.colliders[i].mesh.matrixWorld
+        } 
+        fsquad.material = this.updateMaterial        
+        renderer.setRenderTarget( this.particleRendertargets.write )
         fsquad.render(renderer)
 
-        updateForceMaterial.uniforms.tVel.value = this.particleRendertargets.velocity.texture
-        updateForceMaterial.uniforms.particleMass.value = particleMass
-        updateForceMaterial.uniforms.gravity.value.copy( gravity )
-        updateForceMaterial.uniforms.dampingFactor.value = dampingFactor        
-        fsquad.material = updateForceMaterial
-        fsquad.render(renderer)
-
-        // update velocity
-        renderer.autoClear = false
-
-        updateVelocityMaterial.uniforms.deltaTime.value = deltaTime
-        updateVelocityMaterial.uniforms.tForce.value = this.particleRendertargets.force.texture
-        updateVelocityMaterial.uniforms.particleMass.value = particleMass
-        fsquad.material = updateVelocityMaterial
-        renderer.setRenderTarget( this.particleRendertargets.velocity )
-        fsquad.render(renderer)
-
-        // update position
-        updatePositionMaterial.uniforms.deltaTime.value = deltaTime
-        updatePositionMaterial.uniforms.tVel.value = this.particleRendertargets.velocity.texture
-        fsquad.material = updatePositionMaterial
-        renderer.setRenderTarget( this.particleRendertargets.position )
-        fsquad.render(renderer)
+        // swap buffer
+        const tmp = this.particleRendertargets.write
+        this.particleRendertargets.write = this.particleRendertargets.read
+        this.particleRendertargets.read = tmp
+        this.uniforms.tPosition.value = this.particleRendertargets.read.texture[0]
+        this.uniforms.tLink.value = this.particleRendertargets.read.texture[2]
+        this.uniforms.tSurfaceLink.value = this.particleRendertargets.read.texture.slice(3,7)
 
         // update grid
-        updateGridMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
+        updateGridMaterial.uniforms.tPosition.value = this.particleRendertargets.read.texture[0]
         updateGridMaterial.uniforms.gridSize.value = this.gridSize
         updateGridMaterial.uniforms.gridCellSize.value = gridCellSize
         updateGridMaterial.uniforms.gridTextureSize.value = this.gridRenderTarget.width
@@ -572,39 +486,6 @@ export class GooSimulator extends Group {
         renderer.setRenderTarget( this.gridRenderTarget )
         renderer.render( this.particleInstancedMesh, dummyCamera )
 
-        // update link
-        renderer.autoClear = true
-        renderer.setClearColor(-1,-1)
-        updateLinkMaterial.uniforms.tLink.value = this.particleRendertargets.read.link.texture
-        updateLinkMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
-        updateLinkMaterial.uniforms.formLinkDistance.value = formLinkDistance
-        updateLinkMaterial.uniforms.breakLinkDistance.value = breakLinkDistance
-        updateLinkMaterial.uniforms.tGrid.value = this.gridRenderTarget.texture
-        updateLinkMaterial.uniforms.gridSize.value = this.gridSize
-        updateLinkMaterial.uniforms.gridCellSize.value = gridCellSize
-        fsquad.material = updateLinkMaterial
-        renderer.setRenderTarget( this.particleRendertargets.write.link )
-        fsquad.render( renderer )
-
-        this.updateSurfaceLinkMaterial.uniforms.tPosition.value = this.particleRendertargets.position.texture
-        this.updateSurfaceLinkMaterial.uniforms.tLinks.value = this.particleRendertargets.read.surfaceLink.texture
-        this.updateSurfaceLinkMaterial.uniforms.breakLinkDistance.value = breakLinkDistance
-        this.updateSurfaceLinkMaterial.uniforms.radius.value = radius
-        for( let i=0; i<this.colliders.length; i++ ){
-            const collider = this.colliders[i]
-            this.updateSurfaceLinkMaterial.uniforms.bvhMatrix.value[i] = collider.mesh.matrixWorld
-            this.updateSurfaceLinkMaterial.uniforms[`bvh${i}`].value = collider.bvhUniform
-        }
-        fsquad.material = this.updateSurfaceLinkMaterial
-        renderer.setRenderTarget(this.particleRendertargets.write.surfaceLink)
-        fsquad.render(renderer)
-
-        const tmp = this.particleRendertargets.write
-        this.particleRendertargets.write = this.particleRendertargets.read
-        this.particleRendertargets.read = tmp
-        this.uniforms.tLink.value = this.particleRendertargets.read.link.texture
-        this.uniforms.tSurfaceLink.value = this.particleRendertargets.read.surfaceLink.texture
-        
     }
 
     private recycleParticle(){
