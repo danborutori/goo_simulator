@@ -1,10 +1,7 @@
-import { BufferAttribute, BufferGeometry, Color, CustomBlending, InstancedBufferAttribute, InstancedMesh, Matrix4, MinEquation, OneFactor, PerspectiveCamera, Scene, ShaderMaterial, Texture, Vector2, Vector3, WebGLRenderTarget, WebGLRenderer } from "three";
+import { BufferAttribute, BufferGeometry, Color, CustomBlending, InstancedBufferAttribute, InstancedMesh, Mesh, MinEquation, OneFactor, PerspectiveCamera, Scene, ShaderMaterial, Texture, Vector2, WebGLRenderTarget, WebGLRenderer } from "three";
 
-const v1 = new Vector3
 const v_2 = new Vector2
 const c1 = new Color
-const m1 = new Matrix4
-const m2 = new Matrix4
 
 const _c1 = new Color
 
@@ -80,9 +77,18 @@ class SphereSDFMaterial extends ShaderMaterial {
 }
 
 class LineSegmentSDFMaterial extends ShaderMaterial {
-    constructor(){
+    constructor(
+        numBvh: number
+    ){
         super({
+            defines: {
+                NUM_BVH: numBvh
+            },
             uniforms: {            
+                tPosition: { value: null },
+                tLink: { value: null },
+                tSurfaceLink: { value: [] },
+                bvhMatrix: { value: [] },
                 radius: { value: 1 },
                 gridSize: { value: 1 },
                 gridCellSize: { value: 1 },
@@ -90,14 +96,19 @@ class LineSegmentSDFMaterial extends ShaderMaterial {
                 maxDistance: { value: 1 }
             },
             vertexShader: `
+            uniform sampler2D tPosition;
+            uniform sampler2D tLink;
+            uniform sampler2D tSurfaceLink[4];
+            uniform mat4 bvhMatrix[NUM_BVH];
             uniform float radius;
             uniform float gridSize;
             uniform float gridCellSize;
             uniform float rendertargetSize;
             uniform float maxDistance;
             
-            attribute vec3 segmentA;
-            attribute vec3 segmentB;
+            attribute vec2 instanceId;
+
+            varying float vDistance;
 
             float pointToLineDistance(vec3 p, vec3 a, vec3 b) {
                 vec3 ap = p - a;
@@ -108,18 +119,75 @@ class LineSegmentSDFMaterial extends ShaderMaterial {
                 return distance(p, closestPoint);
             }
 
-            varying float vDistance;
-
             void main(){
-                vec4 wPos = instanceMatrix*vec4(position,1);
+                vDistance = maxDistance;
+                vec2 tPositionSize = vec2(textureSize(tPosition,0));                
+                vec3 segmentA = texture2D(tPosition, instanceId).xyz;
+                vec4 linkIds = texture2D(tLink, instanceId);
+                vec4 surfaceLinks[4] = vec4[4](
+                    texture2D(tSurfaceLink[0],instanceId),
+                    texture2D(tSurfaceLink[1],instanceId),
+                    texture2D(tSurfaceLink[2],instanceId),
+                    texture2D(tSurfaceLink[3],instanceId)
+                );
 
+                mat4 instanceMatrix = mat4(
+                    gridCellSize, 0, 0, 0,
+                    0, gridCellSize, 0, 0,
+                    0, 0, gridCellSize, 0,
+                    0, 0, 0, 1
+                );
+
+                vec4 segmentBs[8] = vec4[8](
+                    vec4(0,0,0,0),
+                    vec4(0,0,0,0),
+                    vec4(0,0,0,0),
+                    vec4(0,0,0,0),
+                    vec4(0,0,0,0),
+                    vec4(0,0,0,0),
+                    vec4(0,0,0,0),
+                    vec4(0,0,0,0)
+                );
+
+                float cnt = 0.0;
+                for( int i=0; i<4; i++ ){
+                    float linkId = linkIds[ i ];
+                    if( linkId>=0.0 ){
+                        vec2 linkUv = (vec2(
+                            mod(linkId,tPositionSize.x),
+                            floor(linkId/tPositionSize.x)
+                        )+0.5)/tPositionSize;
+                        vec3 segmentB = texture2D(tPosition, linkUv).xyz;
+                        segmentBs[ i ] = vec4(segmentB,1);
+
+                        instanceMatrix[3].xyz += segmentB;
+                        cnt += 1.0;
+                    }
+
+                    int bvhIndex = int(surfaceLinks[i].w);
+                    if( bvhIndex>=0 ){
+                        vec3 segmentB = (bvhMatrix[bvhIndex]*vec4(surfaceLinks[i].xyz,1)).xyz;
+                        segmentBs[ i+4 ] = vec4(segmentB,1);
+
+                        instanceMatrix[3].xyz += segmentB;
+                        cnt += 1.0;
+                    }
+                }
+                instanceMatrix[3].xyz /= cnt;
+
+                vec4 wPos = instanceMatrix*vec4(position,1);
                 vec3 gridPos = clamp(
                     floor(wPos.xyz/gridCellSize+gridSize/2.0),
                     0.0,
                     gridSize-1.0
                 );
-                vec3 gridWPos = (gridPos-gridSize/2.0)*gridCellSize;
-                vDistance = min(maxDistance,pointToLineDistance(gridWPos,segmentA,segmentB)-radius);
+                vec3 gridWPos = (gridPos-gridSize/2.0)*gridCellSize;    
+                for( int i=0; i<8; i++ ){
+                    if( segmentBs[ i ].w!=1.0 ) continue;
+                    vec3 segmentB = segmentBs[i].xyz;
+
+                    vDistance = min(vDistance,pointToLineDistance(gridWPos,segmentA,segmentB)-radius);
+                }
                 
                 float gridId = gridPos.x+(gridPos.y+gridPos.z*gridSize)*gridSize;
                 gl_Position = vec4(
@@ -179,7 +247,15 @@ const points = new InstancedMesh(pointGeometry, sphereSdfMaterial, 1)
 points.frustumCulled = false
 
 const lineCubeSize = 8
-const linesegmentSdfMaterial = new LineSegmentSDFMaterial()
+const lineSegmentSdfMaterialCache: {[numBvh:number]: LineSegmentSDFMaterial} = {}
+function getLineSegmentSdfMaterialCache( numBvh: number ){
+    let m = lineSegmentSdfMaterialCache[numBvh]
+    if( !m ){
+        m = new LineSegmentSDFMaterial(numBvh)
+        lineSegmentSdfMaterialCache[numBvh] = m
+    }
+    return m
+}
 const segmentsGeometry = (function(){
     const g = new BufferGeometry()
     const position = new BufferAttribute( new Float32Array(lineCubeSize*lineCubeSize*lineCubeSize*3), 3)
@@ -199,20 +275,18 @@ const segmentsGeometry = (function(){
     g.setAttribute("position",position)
     return g
 })()
-const segments = new InstancedMesh(segmentsGeometry, linesegmentSdfMaterial, 1)
+const segments = new InstancedMesh(segmentsGeometry, undefined, 1)
 ;(segments as any).isMesh = false
 ;(segments as any).isPoints = true
 segments.frustumCulled = false
 
 scene.add(camera)
 scene.add(points)
-// scene.add(segments)
+scene.add(segments)
 
 function setupScene(
     particleCount: number,
-    positionTextureSize: number,
-    lineSegments: {a: Vector3, b: Vector3}[],
-    cellSize: number
+    positionTextureSize: number
 ){
     // update points
     let instanceId = pointGeometry.attributes.instanceId
@@ -230,41 +304,17 @@ function setupScene(
     }
     if( points.instanceMatrix.count<particleCount ){
         points.instanceMatrix = new InstancedBufferAttribute( new Float32Array(16*particleCount), 16)
-        m1.identity()
-        for( let i=0; i<particleCount; i++ )points.setMatrixAt(i, m1)
-        points.instanceMatrix.needsUpdate = true
     }
     points.count = particleCount
 
     // update line segments
-    if( segments.instanceMatrix.count<lineSegments.length ){
-        segments.instanceMatrix = new InstancedBufferAttribute( new Float32Array(16*lineSegments.length), 16)
+    if(segmentsGeometry.attributes.instanceId!==instanceId){
+        segmentsGeometry.setAttribute("instanceId", instanceId )
     }
-    let segmentA = segments.geometry.attributes.segmentA
-    let segmentB = segments.geometry.attributes.segmentB
-    if( !segmentA || segmentA.count<lineSegments.length ){
-        segmentA = new InstancedBufferAttribute(new Float32Array(lineSegments.length*3), 3)
-        segments.geometry.setAttribute("segmentA", segmentA)
+    if( segments.instanceMatrix.count<particleCount*4 ){
+        segments.instanceMatrix = new InstancedBufferAttribute( new Float32Array(16*particleCount*4), 16)
     }
-    if( !segmentB || segmentB.count<lineSegments.length ){
-        segmentB = new InstancedBufferAttribute(new Float32Array(lineSegments.length*3), 3)
-        segments.geometry.setAttribute("segmentB", segmentB)
-    }
-    for( let i=0; i<lineSegments.length; i++ ){
-        const s = lineSegments[i]
-        v1.addVectors( s.a, s.b ).multiplyScalar(0.5)
-        m1.makeTranslation(v1)
-        .multiply(
-            m2.makeScale(cellSize,cellSize,cellSize)
-        )
-        segments.setMatrixAt(i,m1)
-        s.a.toArray(segmentA.array,i*3)
-        s.b.toArray(segmentB.array,i*3)
-    }
-    segments.instanceMatrix.needsUpdate = true
-    segmentA.needsUpdate = true
-    segmentB.needsUpdate = true
-    segments.count = lineSegments.length
+    segments.count = particleCount*4
 }
 
 export class SDFGenerator {
@@ -278,6 +328,7 @@ export class SDFGenerator {
         tPosition: Texture,
         tLink: Texture,
         tSurfaceLink: Texture[],
+        colliders: {mesh:Mesh}[],
         radius: number
     ){
         const maxDistance = pointCubeSize*cellSize/2
@@ -287,13 +338,20 @@ export class SDFGenerator {
         sphereSdfMaterial.uniforms.gridSize.value = gridSize
         sphereSdfMaterial.uniforms.gridCellSize.value = cellSize
         sphereSdfMaterial.uniforms.rendertargetSize.value = target.width
-        sphereSdfMaterial.uniforms.maxDistance.value = maxDistance        
-        linesegmentSdfMaterial.uniforms.radius.value = radius*0.25
-        linesegmentSdfMaterial.uniforms.gridSize.value = gridSize
-        linesegmentSdfMaterial.uniforms.gridCellSize.value = cellSize
-        linesegmentSdfMaterial.uniforms.rendertargetSize.value = target.width
-        linesegmentSdfMaterial.uniforms.maxDistance.value = maxDistance
-        setupScene( particleCount, tPosition.image.width, [], cellSize )
+        sphereSdfMaterial.uniforms.maxDistance.value = maxDistance
+
+        const lineSegmentSdfMaterial = getLineSegmentSdfMaterialCache( colliders.length )
+        lineSegmentSdfMaterial.uniforms.tPosition.value = tPosition
+        lineSegmentSdfMaterial.uniforms.tLink.value = tLink
+        lineSegmentSdfMaterial.uniforms.tSurfaceLink.value = tSurfaceLink
+        for( let i=0; i<colliders.length; i++ )lineSegmentSdfMaterial.uniforms.bvhMatrix.value[i] = colliders[i].mesh.matrixWorld
+        lineSegmentSdfMaterial.uniforms.radius.value = radius*0.25
+        lineSegmentSdfMaterial.uniforms.gridSize.value = gridSize
+        lineSegmentSdfMaterial.uniforms.gridCellSize.value = cellSize
+        lineSegmentSdfMaterial.uniforms.rendertargetSize.value = target.width
+        lineSegmentSdfMaterial.uniforms.maxDistance.value = maxDistance
+        segments.material = lineSegmentSdfMaterial
+        setupScene( particleCount, tPosition.image.width )
 
         const restore = {
             clearColor: renderer.getClearColor(_c1),

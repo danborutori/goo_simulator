@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, Color, FloatType, Group, IUniform, InstancedBufferAttribute, InstancedMesh, LineBasicMaterial, LineSegments, MathUtils, Matrix4, Mesh, NearestFilter, OrthographicCamera, PlaneGeometry, RGBADepthPacking, RGBAFormat, RedFormat, SphereGeometry, Texture, Vector2, Vector3, WebGLMultipleRenderTargets, WebGLRenderTarget, WebGLRenderer } from "three";
+import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, Color, FloatType, Group, IUniform, InstancedBufferAttribute, InstancedMesh, LineBasicMaterial, LineSegments, MathUtils, Mesh, NearestFilter, OrthographicCamera, PlaneGeometry, RGBADepthPacking, RGBAFormat, RedFormat, SphereGeometry, Texture, Vector2, Vector3, WebGLMultipleRenderTargets, WebGLRenderTarget, WebGLRenderer } from "three";
 import { MeshBVH, MeshBVHUniformStruct } from "three-mesh-bvh";
 import { SDFGenerator } from "./SDFGenerator.js";
 import { MarchingDepthMaterial, MarchingMaterial } from "./MarchingMaterial.js";
@@ -381,7 +381,7 @@ export class GooSimulator extends Group {
         })
 
         const group = new Group()
-        // group.visible = false
+        group.visible = false
         this.add( group )
 
         const particleMaterial = new ParticleMaterial()
@@ -495,6 +495,7 @@ export class GooSimulator extends Group {
                 this.particleRendertargets.position.texture,
                 this.particleRendertargets.read.link.texture,
                 this.particleRendertargets.read.surfaceLink.texture,
+                this.colliders,
                 radius
             )
         }
