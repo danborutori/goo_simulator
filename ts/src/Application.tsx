@@ -71,6 +71,7 @@ export class Application {
         })
         this.renderer.shadowMap.enabled = true
         this.renderer.shadowMap.type = PCFShadowMap
+        this.renderer.debug.checkShaderErrors = false
         this.renderer.setClearColor(0x6A81B4)
         this.renderer.setPixelRatio(window.devicePixelRatio)
 
