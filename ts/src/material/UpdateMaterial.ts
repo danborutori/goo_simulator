@@ -181,7 +181,7 @@ export class UpdateMaterial extends ShaderMaterial {
                 }
                 #pragma unroll_loop_end
 
-                // form new link
+                // collide particle 
                 int x, y, z;
                 vec3 gridPos;
                 float gridId;
@@ -212,6 +212,7 @@ export class UpdateMaterial extends ShaderMaterial {
                         vec3 v = positionA-positionB;
                         float d = length( v );
                         if( d>0.0 && d<=formLinkDistance && curLinkId<4 ){
+                            // form new link
                             curLinks[curLinkId++] = gridValue.x;
                         }
 
@@ -274,10 +275,12 @@ export class UpdateMaterial extends ShaderMaterial {
                     distance *= side;
 
                     if( abs(distance)<localSpaceRadius && distance<localSpaceRadius ){
-                        outputLinks[curLinkId++] = vec4(
-                            outPoint,
-                            UNROLLED_LOOP_INDEX.0
-                        );
+                        if( curLinkId<4 ){
+                            outputLinks[curLinkId++] = vec4(
+                                outPoint,
+                                UNROLLED_LOOP_INDEX.0
+                            );
+                        }
 
                         // transform to world space
                         distance /= scale;
