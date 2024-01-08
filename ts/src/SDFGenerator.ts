@@ -1,6 +1,7 @@
-import { BufferAttribute, BufferGeometry, Color, CustomBlending, InstancedBufferAttribute, InstancedMesh, Matrix4, MinEquation, OneFactor, PerspectiveCamera, Scene, ShaderMaterial, Vector3, WebGLRenderTarget, WebGLRenderer } from "three";
+import { BufferAttribute, BufferGeometry, Color, CustomBlending, InstancedBufferAttribute, InstancedMesh, Matrix4, MinEquation, OneFactor, PerspectiveCamera, Scene, ShaderMaterial, Texture, Vector2, Vector3, WebGLRenderTarget, WebGLRenderer } from "three";
 
 const v1 = new Vector3
+const v_2 = new Vector2
 const c1 = new Color
 const m1 = new Matrix4
 const m2 = new Matrix4
@@ -10,7 +11,8 @@ const _c1 = new Color
 class SphereSDFMaterial extends ShaderMaterial {
     constructor(){
         super({
-            uniforms: {            
+            uniforms: {     
+                tPosition: { value: null },       
                 radius: { value: 1 },
                 gridSize: { value: 1 },
                 gridCellSize: { value: 1 },
@@ -18,15 +20,25 @@ class SphereSDFMaterial extends ShaderMaterial {
                 maxDistance: { value: 1 }
             },
             vertexShader: `
+            uniform sampler2D tPosition;
             uniform float radius;
             uniform float gridSize;
             uniform float gridCellSize;
             uniform float rendertargetSize;
             uniform float maxDistance;
 
+            attribute vec2 instanceId;
+
             varying float vDistance;
 
             void main(){
+                mat4 instanceMatrix = mat4(
+                    gridCellSize,0,0,0,
+                    0,gridCellSize,0,0,
+                    0,0,gridCellSize,0,
+                    texture2D(tPosition,instanceId).xyz,1                
+                );
+
                 vec4 origin = instanceMatrix*vec4(0,0,0,1);
                 vec4 wPos = instanceMatrix*vec4(position,1);
 
@@ -194,26 +206,35 @@ segments.frustumCulled = false
 
 scene.add(camera)
 scene.add(points)
-scene.add(segments)
+// scene.add(segments)
 
 function setupScene(
-    spherePositions: {position: Vector3}[],
+    particleCount: number,
+    positionTextureSize: number,
     lineSegments: {a: Vector3, b: Vector3}[],
     cellSize: number
 ){
     // update points
-    if( points.instanceMatrix.count<spherePositions.length ){
-        points.instanceMatrix = new InstancedBufferAttribute( new Float32Array(16*spherePositions.length), 16)
+    let instanceId = pointGeometry.attributes.instanceId
+    if( !instanceId || instanceId.count<particleCount ){
+        instanceId = new InstancedBufferAttribute( new Float32Array(particleCount*2), 2 )
+        for( let i=0; i<particleCount; i++ ){
+            v_2.set(
+                i%positionTextureSize,
+                Math.floor(i/positionTextureSize)
+            ).addScalar(0.5).divideScalar(positionTextureSize)
+            v_2.toArray(instanceId.array,i*2)
+        }
+        instanceId.needsUpdate = true
+        pointGeometry.setAttribute( "instanceId", instanceId )
     }
-    for( let i=0; i<spherePositions.length; i++ ){
-        m1.makeTranslation(spherePositions[i].position)
-        .multiply(
-            m2.makeScale(cellSize,cellSize,cellSize)
-        )
-        points.setMatrixAt(i,m1)
+    if( points.instanceMatrix.count<particleCount ){
+        points.instanceMatrix = new InstancedBufferAttribute( new Float32Array(16*particleCount), 16)
+        m1.identity()
+        for( let i=0; i<particleCount; i++ )points.setMatrixAt(i, m1)
+        points.instanceMatrix.needsUpdate = true
     }
-    points.instanceMatrix.needsUpdate = true
-    points.count = spherePositions.length
+    points.count = particleCount
 
     // update line segments
     if( segments.instanceMatrix.count<lineSegments.length ){
@@ -253,12 +274,15 @@ export class SDFGenerator {
         target: WebGLRenderTarget,
         gridSize: number,
         cellSize: number,
-        spherePositions: {position: Vector3}[],
-        lineSegments: { a: Vector3, b: Vector3 }[],
+        particleCount: number,
+        tPosition: Texture,
+        tLink: Texture,
+        tSurfaceLink: Texture[],
         radius: number
     ){
         const maxDistance = pointCubeSize*cellSize/2
 
+        sphereSdfMaterial.uniforms.tPosition.value = tPosition
         sphereSdfMaterial.uniforms.radius.value = radius
         sphereSdfMaterial.uniforms.gridSize.value = gridSize
         sphereSdfMaterial.uniforms.gridCellSize.value = cellSize
@@ -269,7 +293,7 @@ export class SDFGenerator {
         linesegmentSdfMaterial.uniforms.gridCellSize.value = cellSize
         linesegmentSdfMaterial.uniforms.rendertargetSize.value = target.width
         linesegmentSdfMaterial.uniforms.maxDistance.value = maxDistance
-        setupScene( spherePositions, lineSegments, cellSize )
+        setupScene( particleCount, tPosition.image.width, [], cellSize )
 
         const restore = {
             clearColor: renderer.getClearColor(_c1),
