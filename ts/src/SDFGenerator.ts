@@ -150,29 +150,35 @@ class LineSegmentSDFMaterial extends ShaderMaterial {
                 );
 
                 float cnt = 0.0;
-                for( int i=0; i<4; i++ ){
-                    float linkId = linkIds[ i ];
+                float linkId;
+                vec2 linkUv;
+                vec3 segmentB;
+                int bvhIndex;
+                #pragma unroll_loop_start 
+                for ( int i = 0; i < 4; i ++ ) {
+                    linkId = linkIds[ i ];
                     if( linkId>=0.0 ){
-                        vec2 linkUv = (vec2(
+                        linkUv = (vec2(
                             mod(linkId,tPositionSize.x),
                             floor(linkId/tPositionSize.x)
                         )+0.5)/tPositionSize;
-                        vec3 segmentB = texture2D(tPosition, linkUv).xyz;
+                        segmentB = texture2D(tPosition, linkUv).xyz;
                         segmentBs[ i ] = vec4(segmentB,1);
 
                         instanceMatrix[3].xyz += segmentB;
                         cnt += 1.0;
                     }
 
-                    int bvhIndex = int(surfaceLinks[i].w);
+                    bvhIndex = int(surfaceLinks[ i ].w);
                     if( bvhIndex>=0 ){
-                        vec3 segmentB = (bvhMatrix[bvhIndex]*vec4(surfaceLinks[i].xyz,1)).xyz;
-                        segmentBs[ i+4 ] = vec4(segmentB,1);
+                        segmentB = (bvhMatrix[bvhIndex]*vec4(surfaceLinks[ i ].xyz,1)).xyz;
+                        segmentBs[ UNROLLED_LOOP_INDEX+4 ] = vec4(segmentB,1);
 
                         instanceMatrix[3].xyz += segmentB;
                         cnt += 1.0;
                     }
                 }
+                #pragma unroll_loop_end
                 instanceMatrix[3].xyz /= cnt;
 
                 vec4 wPos = instanceMatrix*vec4(position,1);
@@ -182,12 +188,15 @@ class LineSegmentSDFMaterial extends ShaderMaterial {
                     gridSize-1.0
                 );
                 vec3 gridWPos = (gridPos-gridSize/2.0)*gridCellSize;    
-                for( int i=0; i<8; i++ ){
-                    if( segmentBs[ i ].w!=1.0 ) continue;
-                    vec3 segmentB = segmentBs[i].xyz;
+                #pragma unroll_loop_start 
+                for ( int i = 0; i < 8; i ++ ) {
+                    if( segmentBs[ i ].w==1.0 ){
+                        vec3 segmentB = segmentBs[ i ].xyz;
 
-                    vDistance = min(vDistance,pointToLineDistance(gridWPos,segmentA,segmentB)-radius);
+                        vDistance = min(vDistance,pointToLineDistance(gridWPos,segmentA,segmentB)-radius);
+                    }
                 }
+                #pragma unroll_loop_end
                 
                 float gridId = gridPos.x+(gridPos.y+gridPos.z*gridSize)*gridSize;
                 gl_Position = vec4(

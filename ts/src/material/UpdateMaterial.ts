@@ -87,6 +87,10 @@ export class UpdateMaterial extends ShaderMaterial {
 
             varying vec2 vUv;
 
+            int imod( int a, int b ){
+                return a-(a/b)*b;
+            }
+
             void main() {
 
                 vec3 force = vec3(0,0,0);
@@ -102,56 +106,70 @@ export class UpdateMaterial extends ShaderMaterial {
                 vec4 curLinks = vec4(-1,-1,-1,-1);
 
                 // keep unbroken link
-                for( int i=0; i<4; i++ ){
-                    float id = prevLinks[i];
-                    if( id<0.0 ) continue;
-                    vec2 uv = (vec2(
-                        mod(id,tPositionSize.x),
-                        floor(id/tPositionSize.x)
-                    )+0.5)/tPositionSize;
-                    
-                    vec3 positionB = texture2D( tPosition, uv ).xyz;
+                float id;
+                vec2 uv;
+                vec3 positionB;
+                float d;
+                #pragma unroll_loop_start 
+                for ( int i = 0; i < 4; i ++ ) {
+                    id = prevLinks[ i ];
+                    if( id>=0.0 ){
+                        uv = (vec2(
+                            mod(id,tPositionSize.x),
+                            floor(id/tPositionSize.x)
+                        )+0.5)/tPositionSize;
+                        
+                        positionB = texture2D( tPosition, uv ).xyz;
 
-                    float d = distance(positionA,positionB);
+                        d = distance(positionA,positionB);
 
-                    if( d!=0.0 && d<breakLinkDistance ){
-                        curLinks[curLinkId++] = id;
+                        if( d!=0.0 && d<breakLinkDistance ){
+                            curLinks[curLinkId++] = id;
+                        }
                     }
                 }
+                #pragma unroll_loop_end
 
                 // form new link
-                for( int z=-1; z<=1; z++ ){
-                    for( int y=-1; y<=1; y++ ){
-                        for( int x=-1; x<=1; x++ ){
-                            vec3 gridPos = clamp(
-                                floor(positionA/gridCellSize)+(gridSize/2.0)+vec3(x,y,z),
-                                0.0,
-                                gridSize-1.0
-                            );
-                            float gridId = dot(gridPos,vec3(1,gridSize,gridSize*gridSize));
-                            vec2 gridUv = (vec2(
-                                mod(gridId,tGridSize.x),
-                                floor(gridId/tGridSize.x)
-                            )+0.5)/tGridSize;
+                int x, y, z;
+                vec3 gridPos;
+                float gridId;
+                vec2 gridUv;
+                vec4 gridValue;
+                #pragma unroll_loop_start 
+                for ( int i = 0; i < 27; i ++ ) {
+                    x = imod(UNROLLED_LOOP_INDEX,3)-1;
+                    y = imod(UNROLLED_LOOP_INDEX/3,3)-1;
+                    z = UNROLLED_LOOP_INDEX/9-1;
+                
+                    gridPos = clamp(
+                        floor(positionA/gridCellSize)+(gridSize/2.0)+vec3(x,y,z),
+                        0.0,
+                        gridSize-1.0
+                    );
+                    gridId = dot(gridPos,vec3(1,gridSize,gridSize*gridSize));
+                    gridUv = (vec2(
+                        mod(gridId,tGridSize.x),
+                        floor(gridId/tGridSize.x)
+                    )+0.5)/tGridSize;
 
-                            vec4 gridValue = texture2D( tGrid, gridUv );
+                    gridValue = texture2D( tGrid, gridUv );
 
-                            if( gridValue.w!=0.0 ){
-                                vec3 positionB = texture2D( tPosition, gridValue.yz ).xyz;
+                    if( gridValue.w!=0.0 ){
+                        vec3 positionB = texture2D( tPosition, gridValue.yz ).xyz;
 
-                                vec3 v = positionA-positionB;
-                                float d = length( v );
-                                if( d>0.0 && d<=formLinkDistance && curLinkId<4 ){
-                                    curLinks[curLinkId++] = gridValue.x;
-                                }
-
-                                if( d>0.0 && d<radius*2.0 ){
-                                    force += v*(0.005/(d*d));
-                                }
-                            }                            
+                        vec3 v = positionA-positionB;
+                        float d = length( v );
+                        if( d>0.0 && d<=formLinkDistance && curLinkId<4 ){
+                            curLinks[curLinkId++] = gridValue.x;
                         }
-                    }    
+
+                        if( d>0.0 && d<radius*2.0 ){
+                            force += v*(0.005/(d*d));
+                        }
+                    }                            
                 }
+                #pragma unroll_loop_end
 
                 // update surface link
                 vec4 links[4] = vec4[4](
@@ -169,16 +187,19 @@ export class UpdateMaterial extends ShaderMaterial {
                 curLinkId = 0;
 
                 // break link
-                for( int i=0; i<4; i++ ){
-                    int index = int(links[ i ].w);
-                    if( index<0 ) continue;
-
-                    vec3 wPos = (bvhMatrix[ index ] * vec4(links[ i ].xyz,1)).xyz;
-                    float d = distance( positionA, wPos );
-                    if( d <= breakLinkDistance ){
-                        outputLinks[curLinkId++] = links[ i ];
+                int index;
+                #pragma unroll_loop_start 
+                for ( int i = 0; i < 4; i ++ ) {
+                    index = int(links[ i ].w);
+                    if( index>=0 ){
+                        vec3 wPos = (bvhMatrix[ index ] * vec4(links[ i ].xyz,1)).xyz;
+                        float d = distance( positionA, wPos );
+                        if( d <= breakLinkDistance ){
+                            outputLinks[curLinkId++] = links[ i ];
+                        }
                     }
                 }
+                #pragma unroll_loop_end
 
                 mat4 bvhMatrixInv;
                 vec3 localPosition;
@@ -230,40 +251,48 @@ export class UpdateMaterial extends ShaderMaterial {
                 #pragma unroll_loop_end
 
                 // apply link force
-                for( int i=0; i<4; i++ ){
-                    float id = curLinks[i];
+                vec3 v;
+                float str;
+                #pragma unroll_loop_start 
+                for ( int i = 0; i < 4; i ++ ) {
+                    id = curLinks[ i ];
                     if( id>=0.0 ){
-                        vec2 uv = (vec2(
+                        uv = (vec2(
                             mod(id,tPositionSize.x),
                             floor(id/tPositionSize.x)
                         )+0.5)/tPositionSize;
 
-                        vec3 positionB = texture2D( tPosition, uv ).xyz;
+                        positionB = texture2D( tPosition, uv ).xyz;
 
-                        vec3 v = positionA-positionB;
+                        v = positionA-positionB;
                         
-                        float d = length( v );
+                        d = length( v );
                         if( d!=0.0 ){
                             v /= d;
-                            float str = (formLinkDistance-d)*linkStrength;
+                            str = (formLinkDistance-d)*linkStrength;
                 
                             force += v*str;
                         }
                     }
                 }
+                #pragma unroll_loop_end
 
+                vec4 surfaceLink;
+                vec3 wPos;                
+                #pragma unroll_loop_start 
                 for ( int i = 0; i < 4; i ++ ) {
-                    vec4 surfaceLink = outputLinks[ i ];
-                    int index = int(surfaceLink.w);
+                    surfaceLink = outputLinks[ i ];
+                    index = int(surfaceLink.w);
                     if( index>=0 ){
-                        vec3 wPos = (bvhMatrix[index]*vec4(surfaceLink.xyz,1)).xyz;
-                        vec3 v = positionA-wPos;
-                        float d = length( v );
+                        wPos = (bvhMatrix[index]*vec4(surfaceLink.xyz,1)).xyz;
+                        v = positionA-wPos;
+                        d = length( v );
                         v /= d;
-                        float str = (radius-d)*stickyness;
+                        str = (radius-d)*stickyness;
                         force += v*str;
                     }
                 }
+                #pragma unroll_loop_end
 
                 // apply gravity and damping
                 force += gravity*particleMass;

@@ -69,21 +69,27 @@ function modify( material: Material, uniforms: {
                 );
                 float distances[8];
 
-                for( int j=0; j<8; j++ ){
-                    vec3 gridPosClamped = clamp(
-                        gridPosAligned[j],
+                vec3 gridPosClamped;
+                float gridId;
+                vec2 gridTextureSize;
+                vec2 uv;
+                #pragma unroll_loop_start 
+                for ( int i = 0; i < 8; i ++ ) {
+                    gridPosClamped = clamp(
+                        gridPosAligned[ i ],
                         0.0,
                         gridSize-1.0
                     );
-                    float gridId = gridPosClamped.x+(gridPosClamped.y+gridPosClamped.z*gridSize)*gridSize;
-                    vec2 gridTextureSize = vec2(textureSize(tSDF,0));
-                    vec2 uv = vec2(
+                    gridId = gridPosClamped.x+(gridPosClamped.y+gridPosClamped.z*gridSize)*gridSize;
+                    gridTextureSize = vec2(textureSize(tSDF,0));
+                    uv = vec2(
                         mod( gridId, gridTextureSize.x ),
                         floor(gridId/gridTextureSize.y)
                     )/gridTextureSize;
 
-                    distances[j] = texture2D(tSDF, uv).r;            
+                    distances[ i ] = texture2D(tSDF, uv).r;            
                 }
+                #pragma unroll_loop_end
                 vec3 blend = 1.0-(gridPos-gridPosAligned[7]);
                 float distance = mix(
                     mix(
@@ -116,6 +122,10 @@ function modify( material: Material, uniforms: {
                 );
 
                 return distance;
+            }
+
+            int imod( int a, int b ){
+                return a-(a/b)*b;
             }
 
             #if NUM_SPOT_LIGHT_COORDS > 0
@@ -170,15 +180,20 @@ function modify( material: Material, uniforms: {
 
             vec3 curWPos = (cameraWorldMatrix*vec4(curVPos,1)).xyz;
             normal = vec3(0,0,0);
-            for( int z=-1; z<=1; z++ ){
-                for( int y=-1; y<=1; y++ ){
-                    for( int x=-1; x<=1; x++ ){
-                        vec3 dir = vec3( x, y, z );
-                        float distance = sampleDepth(curWPos+dir*gridCellSize);
-                        normal += dir*(distance-curDistance);
-                    }
-                }    
+            int x, y, z;
+            vec3 dir;
+            float distance;
+            #pragma unroll_loop_start 
+            for ( int i = 0; i < 27; i ++ ) {
+                x = imod(UNROLLED_LOOP_INDEX,3)-1;
+                y = imod(UNROLLED_LOOP_INDEX/3,3)-1;
+                z = UNROLLED_LOOP_INDEX/9-1;
+            
+                dir = vec3( x, y, z );
+                distance = sampleDepth(curWPos+dir*gridCellSize);
+                normal += dir*(distance-curDistance);            
             }
+            #pragma unroll_loop_end
 
             normal = normalize((viewMatrix*vec4(normal,0)).xyz);
             `
