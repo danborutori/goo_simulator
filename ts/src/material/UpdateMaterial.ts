@@ -91,6 +91,32 @@ export class UpdateMaterial extends ShaderMaterial {
                 return a-(a/b)*b;
             }
 
+            vec3 hash3(vec3 p) {
+                p = fract(p * 0.3183099 + vec3(0.1, 0.1, 0.1));
+                p += dot(p, p + 47.0);
+                return fract(vec3(p.x * p.y, p.y * p.z, p.z * p.x));
+            }
+            
+            vec3 noise3(vec3 x) {
+                vec3 p = floor(x);
+                vec3 f = fract(x);
+            
+                f = f * f * (3.0 - 2.0 * f);
+            
+                vec3 aaa = hash3(p + vec3(0.0, 0.0, 0.0));
+                vec3 aba = hash3(p + vec3(1.0, 0.0, 0.0));
+                vec3 aab = hash3(p + vec3(0.0, 1.0, 0.0));
+                vec3 abb = hash3(p + vec3(1.0, 1.0, 0.0));
+                vec3 baa = hash3(p + vec3(0.0, 0.0, 1.0));
+                vec3 bba = hash3(p + vec3(1.0, 0.0, 1.0));
+                vec3 bab = hash3(p + vec3(0.0, 1.0, 1.0));
+                vec3 bbb = hash3(p + vec3(1.0, 1.0, 1.0));
+            
+                vec3 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+            
+                return mix(mix(mix(aaa, aba, u.x), mix(aab, abb, u.x), u.y), mix(mix(baa, bba, u.x), mix(bab, bbb, u.x), u.y), u.z);
+            }
+
             void main() {
 
                 vec3 force = vec3(0,0,0);
@@ -101,9 +127,34 @@ export class UpdateMaterial extends ShaderMaterial {
                 vec2 tGridSize = vec2(textureSize(tGrid,0));
                 vec3 positionA = texture2D( tPosition, vUv ).xyz;
                 vec4 prevLinks = texture2D( tLink, vUv );
+                vec4 links[4] = vec4[4](
+                    texture2D( tInput[3], vUv ),
+                    texture2D( tInput[4], vUv ),
+                    texture2D( tInput[5], vUv ),
+                    texture2D( tInput[6], vUv )
+                );
 
                 int curLinkId = 0;
                 vec4 curLinks = vec4(-1,-1,-1,-1);
+                vec4 outputLinks[4] = vec4[4](
+                    vec4(0,0,0,-1),
+                    vec4(0,0,0,-1),
+                    vec4(0,0,0,-1),
+                    vec4(0,0,0,-1)
+                );
+
+                // recycle particle
+                if(positionA.y<-2.0){
+                    positionA = (noise3(positionA)*2.0-1.0)*radius*32.0;
+                    positionA.y = abs(positionA.y)*20.0+4.0;
+                    force = vec3(0,0,0);
+                    velocity = vec3(0,0,0);
+                    prevLinks = vec4(-1,-1,-1,-1);
+                    links[0] = vec4(0,0,0,-1);
+                    links[1] = vec4(0,0,0,-1);
+                    links[2] = vec4(0,0,0,-1);
+                    links[3] = vec4(0,0,0,-1);
+                }
 
                 // keep unbroken link
                 float id;
@@ -172,18 +223,6 @@ export class UpdateMaterial extends ShaderMaterial {
                 #pragma unroll_loop_end
 
                 // update surface link
-                vec4 links[4] = vec4[4](
-                    texture2D( tInput[3], vUv ),
-                    texture2D( tInput[4], vUv ),
-                    texture2D( tInput[5], vUv ),
-                    texture2D( tInput[6], vUv )
-                );
-                vec4 outputLinks[4] = vec4[4](
-                    vec4(0,0,0,-1),
-                    vec4(0,0,0,-1),
-                    vec4(0,0,0,-1),
-                    vec4(0,0,0,-1)
-                );
                 curLinkId = 0;
 
                 // break link

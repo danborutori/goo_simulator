@@ -1,7 +1,7 @@
 import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, Color, FloatType, Group, IUniform, InstancedBufferAttribute, InstancedMesh, LineBasicMaterial, LineSegments, MathUtils, Mesh, NearestFilter, OrthographicCamera, PlaneGeometry, RGBADepthPacking, RGBAFormat, RedFormat, SphereGeometry, Texture, Vector2, Vector3, WebGLMultipleRenderTargets, WebGLRenderTarget, WebGLRenderer } from "three";
 import { MeshBVH, MeshBVHUniformStruct } from "three-mesh-bvh";
 import { SDFGenerator } from "./SDFGenerator.js";
-import { MarchingDepthMaterial, MarchingMaterial } from "./MarchingMaterial.js";
+import { MarchingDepthMaterial, MarchingMaterial } from "./material/MarchingMaterial.js";
 import { InitMaterial } from "./material/InitMaterial.js";
 import { FullScreenQuad } from "three/examples/jsm/Addons";
 import { ParticleMaterial } from "./material/ParticleMaterial.js";
@@ -244,7 +244,7 @@ export class GooSimulator extends Group {
     private uniforms = {
         tPosition: { value: null } as IUniform<Texture | null>,
         tLink: { value: null } as IUniform<Texture | null>,
-        tSurfaceLink: { value: null } as IUniform<Texture[] | null>
+        tSurfaceLink: { value: [] } as IUniform<Texture[] | null>
     }
     private updateMaterial: UpdateMaterial
 
@@ -396,9 +396,6 @@ export class GooSimulator extends Group {
         this.deltaTime += deltaTime
         let simulationRun = false
 
-        if(this.deltaTime>fixedTimeStep)
-            this.recycleParticle()
-
         const restore = {
             rendertarget: renderer.getRenderTarget(),
             activeCubeFace: renderer.getActiveCubeFace(),
@@ -425,9 +422,9 @@ export class GooSimulator extends Group {
                 this.gridSize,
                 gridCellSize,
                 this.particleCount,
-                this.particleRendertargets.read.texture[0],
-                this.particleRendertargets.read.texture[2],
-                this.particleRendertargets.read.texture.slice(3,7),
+                this.uniforms.tPosition.value!,
+                this.uniforms.tLink.value!,
+                this.uniforms.tSurfaceLink.value!,
                 this.colliders,
                 radius
             )
@@ -468,7 +465,7 @@ export class GooSimulator extends Group {
         this.uniforms.tSurfaceLink.value = this.particleRendertargets.read.texture.slice(3,7)
 
         // update grid
-        updateGridMaterial.uniforms.tPosition.value = this.particleRendertargets.read.texture[0]
+        updateGridMaterial.uniforms.tPosition.value = this.uniforms.tPosition.value
         updateGridMaterial.uniforms.gridSize.value = this.gridSize
         updateGridMaterial.uniforms.gridCellSize.value = gridCellSize
         updateGridMaterial.uniforms.gridTextureSize.value = this.gridRenderTarget.width
@@ -478,15 +475,5 @@ export class GooSimulator extends Group {
         renderer.setRenderTarget( this.gridRenderTarget )
         renderer.render( this.particleInstancedMesh, dummyCamera )
 
-    }
-
-    private recycleParticle(){
-        // let i = 0
-        // for( let p of this.particles ){
-        //     if(p.position.y<-2){
-        //         p.position.set(Math.random(),0,Math.random()).subScalar(0.5).normalize().multiplyScalar(Math.random()*radius*32)
-        //         p.position.y = 4+(i++)*radius
-        //     }
-        // }
     }
 }
