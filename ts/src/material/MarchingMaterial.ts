@@ -1,4 +1,4 @@
-import { Texture, FrontSide, Vector2, MeshStandardMaterial, Material, MeshDepthMaterial } from "three";
+import { Texture, FrontSide, Vector2, Material, MeshDepthMaterial, MeshPhysicalMaterial } from "three";
 
 function modify( material: Material, uniforms: {
         resolution: { value: Vector2 }
@@ -29,7 +29,9 @@ function modify( material: Material, uniforms: {
             uniform sampler2D tSDF;
             uniform float gridSize;
             uniform float gridCellSize;
+            #ifndef USE_TRANSMISSION
             uniform mat4 projectionMatrix;
+            #endif
 
             const float ditherMatrix16x16[256] = float[](
                 0.0,128.0,32.0,160.0,8.0,136.0,40.0,168.0,2.0,130.0,34.0,162.0,10.0,138.0,42.0,170.0,
@@ -152,8 +154,9 @@ function modify( material: Material, uniforms: {
             vec3 curVPos = vec3(0,0,0)+vDir*(near/vDir.z)+step*getDither();
             float curDistance;
 
+            vec4 wPos;
             for( int i=0; i<MARCHING_STEP; i++ ){
-                vec4 wPos = cameraWorldMatrix*vec4(curVPos,1);
+                wPos = cameraWorldMatrix*vec4(curVPos,1);
                 float distance = sampleDepth(wPos.xyz);
                 curDistance = distance;
 
@@ -171,6 +174,7 @@ function modify( material: Material, uniforms: {
             
             gl_FragDepth = finalSPos.z*0.5+0.5;
             vec3 vViewPosition = -curVPos;
+            vec3 vWorldPosition = wPos.xyz;
             
             `
         ).replace(
@@ -222,7 +226,7 @@ function modify( material: Material, uniforms: {
     }
 }
 
-export class MarchingMaterial extends MeshStandardMaterial {
+export class MarchingMaterial extends MeshPhysicalMaterial {
     readonly uniforms = {
         resolution: { value: new Vector2 },
         gridSize: { value: 0 },
@@ -234,6 +238,8 @@ export class MarchingMaterial extends MeshStandardMaterial {
     ){
         super({
             color: 0x00FF00,
+            roughness: 0.1,
+            transmission: 0.5,
             depthTest: true,
             depthWrite: true,
             side: FrontSide,
