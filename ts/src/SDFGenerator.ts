@@ -159,7 +159,6 @@ class LineSegmentSDFMaterial extends ShaderMaterial {
     }
 }
 
-const scene = new Scene
 const camera = new PerspectiveCamera()
 
 const lineCubeSize = 8
@@ -195,9 +194,6 @@ const segments = new InstancedMesh(segmentsGeometry, undefined, 1)
 ;(segments as any).isMesh = false
 ;(segments as any).isPoints = true
 segments.frustumCulled = false
-
-scene.add(camera)
-scene.add(segments)
 
 function setupScene(
     particleCount: number,
@@ -263,7 +259,7 @@ export class SDFGenerator {
         renderer.setClearColor(c1.set(maxDistance,0,0))
 
         renderer.setRenderTarget( target )
-        renderer.render(scene,camera)
+        renderer.render(segments,camera)
 
         renderer.setRenderTarget(restore.rendertarget, restore.activeCubeface, restore.activeMipLevel)
         renderer.setClearColor(restore.clearColor)
