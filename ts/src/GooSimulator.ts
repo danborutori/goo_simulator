@@ -282,6 +282,7 @@ export class GooSimulator extends Group {
                     wrapT: ClampToEdgeWrapping
                 })
         }
+        this.swapRendertarget()
         this.initParticle(renderer)
         const gridRenderTargetWidth = MathUtils.ceilPowerOfTwo(Math.sqrt(gridSize*gridSize*gridSize))
         this.gridRenderTarget = new WebGLRenderTarget(gridRenderTargetWidth,gridRenderTargetWidth,{
