@@ -7,6 +7,7 @@ import { FullScreenQuad } from "three/examples/jsm/Addons";
 import { ParticleMaterial } from "./material/ParticleMaterial.js";
 import { UpdateGridMaterial } from "./material/UpdateGridMaterial.js";
 import { UpdateMaterial } from "./material/UpdateMaterial.js";
+import { RecycleParticleMaterial } from "./material/RecycleParticleMaterial.js";
 
 const v2_1 = new Vector2
 
@@ -212,6 +213,7 @@ function createSurfaceLinkMesh(
 
 const fsquad = new FullScreenQuad()
 const initMaterial = new InitMaterial()
+const recycleParticleMaterial = new RecycleParticleMaterial()
 const updateGridMaterial = new UpdateGridMaterial()
 const dummyCamera = new OrthographicCamera()
 
@@ -431,7 +433,23 @@ export class GooSimulator extends Group {
         }
     }
 
+    private swapRendertarget(){
+        const tmp = this.particleRendertargets.write
+        this.particleRendertargets.write = this.particleRendertargets.read
+        this.particleRendertargets.read = tmp
+        this.uniforms.tPosition.value = this.particleRendertargets.read.texture[0]
+        this.uniforms.tLink.value = this.particleRendertargets.read.texture[2]
+        this.uniforms.tSurfaceLink.value = this.particleRendertargets.read.texture.slice(3,7)
+    }
+
     private simulate( deltaTime: number, renderer: WebGLRenderer ){
+        //recycle material
+        recycleParticleMaterial.uniforms.tInput.value = this.particleRendertargets.read.texture
+        recycleParticleMaterial.uniforms.radius.value = radius
+        fsquad.material = recycleParticleMaterial
+        renderer.setRenderTarget(this.particleRendertargets.write)
+        fsquad.render(renderer)
+        this.swapRendertarget()
 
         // update force
         this.updateMaterial.uniforms.deltaTime.value = deltaTime
@@ -455,14 +473,7 @@ export class GooSimulator extends Group {
         fsquad.material = this.updateMaterial        
         renderer.setRenderTarget( this.particleRendertargets.write )
         fsquad.render(renderer)
-
-        // swap buffer
-        const tmp = this.particleRendertargets.write
-        this.particleRendertargets.write = this.particleRendertargets.read
-        this.particleRendertargets.read = tmp
-        this.uniforms.tPosition.value = this.particleRendertargets.read.texture[0]
-        this.uniforms.tLink.value = this.particleRendertargets.read.texture[2]
-        this.uniforms.tSurfaceLink.value = this.particleRendertargets.read.texture.slice(3,7)
+        this.swapRendertarget()
 
         // update grid
         updateGridMaterial.uniforms.tPosition.value = this.uniforms.tPosition.value
