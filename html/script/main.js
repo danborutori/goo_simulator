@@ -1,3 +1,5 @@
 import { Application } from "./Application.js";
-const app = new Application();
-app.init(mainCanvas);
+Application.create().then(app => {
+    app.init(mainCanvas);
+    app.start(hudRoot);
+});
