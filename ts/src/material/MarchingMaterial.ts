@@ -151,7 +151,9 @@ function modify( material: Material, uniforms: {
             float near = -projectionMatrix[3][2] / (projectionMatrix[2][2] - 1.0);
             float far = -projectionMatrix[3][2] / (projectionMatrix[2][2] + 1.0);
             vec3 step = vDir*(far-near)/vDir.z/float(MARCHING_STEP);
-            vec3 curVPos = vec3(0,0,0)+vDir*(near/vDir.z)+step*getDither();
+            vec3 startVPos = vec3(0,0,0)+vDir*(near/vDir.z)+step*getDither();
+            vec3 endVPos = vec3(0,0,0)+vDir*(far/vDir.z);
+            vec3 curVPos = startVPos;
             float curDistance;
 
             vec4 wPos;
@@ -161,10 +163,17 @@ function modify( material: Material, uniforms: {
                 curDistance = distance;
 
                 if( sign(distance)*pow(abs(distance),0.125)<=0.613237564 ){
+                    endVPos = curVPos;
+                    curVPos = (startVPos+endVPos)*0.5;
                     hit = true;
-                    break;
+                }else{
+                    startVPos = curVPos;
+                    if( !hit ){
+                        curVPos += step;
+                    }else{
+                        curVPos = (startVPos+endVPos)*0.5;
+                    }
                 }
-                curVPos += step;
             }
 
             vec4 finalSPos = projectionMatrix*vec4(curVPos,1);
