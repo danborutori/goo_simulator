@@ -10,6 +10,10 @@ The Three-BVH-Mesh algorithm, short for Bounding Volume Hierarchy Mesh, is emplo
 
 ## Live Demo
 ![Alt Text](screenshot.png)
+Press the left or right arrow keys to rotate the model around the y-axis.
+Press the up or down arrow keys to rotate the model around the x-axis.
+
+
 https://rawcdn.githack.com/danborutori/goo_simulator/3a3f67cc58522a2a10b8886c1db1b3a4b4429a85/html/index.html
 
 ## Credit
