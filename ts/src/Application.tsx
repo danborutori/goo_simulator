@@ -1,9 +1,10 @@
-import {AmbientLight, Mesh, Object3D, PCFShadowMap, PerspectiveCamera, Quaternion, SpotLight, Vector3, WebGLRenderer} from "three"
+import {AmbientLight, Mesh, Object3D, PCFShadowMap, PerspectiveCamera, Quaternion, ShaderChunk, SpotLight, Vector3, WebGLRenderer} from "three"
 import { GooSimulator } from "./GooSimulator.js"
 import { FpsCounter } from "./FpsCounter.js"
 import ReactDOM from "react-dom"
 import React from "react"
 import {GLTFLoader, OrbitControls} from "three/examples/jsm/Addons"
+import { ditherShaderFunction } from "./material/dither.js"
 // import { ShadowMapDebugger } from "./ShadowMapDebugger.js"
 
 const v1 = new Vector3
@@ -173,3 +174,13 @@ export class Application {
         this.camera.updateProjectionMatrix()
     }
 }
+
+ShaderChunk.shadowmap_pars_fragment = `
+    ${ditherShaderFunction}
+    `+ShaderChunk.shadowmap_pars_fragment.replace(
+    "shadowCoord.z += shadowBias;",
+    `
+    shadowCoord.xy += vec2(getDither())/shadowMapSize;
+    shadowCoord.z += shadowBias;
+    `
+)
