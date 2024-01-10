@@ -9,6 +9,7 @@ In this simulation, the goo substance is represented by a collection of particle
 The Three-BVH-Mesh algorithm, short for Bounding Volume Hierarchy Mesh, is employed for efficient collision detection within the simulation. This algorithm partitions the goo's mesh into a hierarchical tree structure, enabling fast and accurate detection of collisions with other objects or surfaces within the environment.
 
 ## Live Demo
+![Alt Text](screenshot.png)
 https://rawcdn.githack.com/danborutori/goo_simulator/3a3f67cc58522a2a10b8886c1db1b3a4b4429a85/html/index.html
 
 ## Credit
