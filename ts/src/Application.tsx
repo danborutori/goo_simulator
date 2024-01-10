@@ -45,7 +45,8 @@ export class Application {
 
 
     private gooSimulator!: GooSimulator
-    private bunnyRotDir = 0
+    private bunnyRotYDir = 0
+    private bunnyRotXDir = 0
 
     static async create(){
         const s = await createScene()
@@ -105,19 +106,29 @@ export class Application {
         window.addEventListener("resize", ()=>{ this.onResize() })
         window.addEventListener("keydown", event=>{
             switch(event.key){
+            case "ArrowUp":
+                this.bunnyRotXDir = -1
+                break
+            case "ArrowDown":
+                this.bunnyRotXDir = 1
+                break
             case "ArrowRight":
-                this.bunnyRotDir = -1
+                this.bunnyRotYDir = -1
                 break
             case "ArrowLeft":
-                this.bunnyRotDir = 1
+                this.bunnyRotYDir = 1
                 break
             }
         })
         window.addEventListener("keyup", event=>{
             switch(event.key){
+            case "ArrowUp":
+            case "ArrowDown":
+                this.bunnyRotXDir = 0
+                break
             case "ArrowRight":
             case "ArrowLeft":
-                this.bunnyRotDir = 0
+                this.bunnyRotYDir = 0
                 break
             }
         })
@@ -156,7 +167,8 @@ export class Application {
 
     private update( deltaTime: number ){
 
-        this.bunny.quaternion.multiply(q1.setFromAxisAngle(v1.set(0,1,0), Math.PI*deltaTime*this.bunnyRotDir))
+        this.bunny.quaternion.multiply(q1.setFromAxisAngle(v1.set(0,1,0), Math.PI*deltaTime*this.bunnyRotYDir))
+        .multiply(q1.setFromAxisAngle(v1.set(1,0,0), Math.PI*deltaTime*this.bunnyRotXDir))
         this.gooSimulator.update(deltaTime,this.renderer)
 
     }
