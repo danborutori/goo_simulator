@@ -5,11 +5,12 @@ function modify( material: Material, uniforms: {
         gridSize: { value: number }
         gridCellSize: { value: number }
     },
-    sdfTexture: Texture
+    sdfTexture: Texture,
+    marchingStep: number
 ){
     const defines = material.defines || (material.defines = {})
     defines.MARCHING_MATERIAL = "1"
-    defines.MARCHING_STEP = 64
+    defines.MARCHING_STEP = marchingStep
 
     material.onBeforeCompile = shader=>{
 
@@ -157,9 +158,11 @@ function modify( material: Material, uniforms: {
             float curDistance;
 
             vec4 wPos;
-            for( int i=0; i<MARCHING_STEP; i++ ){
+            float distance;
+            #pragma unroll_loop_start
+            for( int i=0; i<${marchingStep}; i++ ){
                 wPos = cameraWorldMatrix*vec4(curVPos,1);
-                float distance = sampleDepth(wPos.xyz);
+                distance = sampleDepth(wPos.xyz);
                 curDistance = distance;
 
                 if( sign(distance)*pow(abs(distance),0.125)<=0.613237564 ){
@@ -175,6 +178,7 @@ function modify( material: Material, uniforms: {
                     }
                 }
             }
+            #pragma unroll_loop_end
 
             vec4 finalSPos = projectionMatrix*vec4(curVPos,1);
             finalSPos /= finalSPos.w;
@@ -195,7 +199,6 @@ function modify( material: Material, uniforms: {
             normal = vec3(0,0,0);
             int x, y, z;
             vec3 dir;
-            float distance;
             #pragma unroll_loop_start 
             for ( int i = 0; i < 27; i ++ ) {
                 x = imod(UNROLLED_LOOP_INDEX,3)-1;
@@ -255,7 +258,7 @@ export class MarchingMaterial extends MeshPhysicalMaterial {
             shadowSide: FrontSide
         })
 
-        modify( this, this.uniforms, sdfTexture )
+        modify( this, this.uniforms, sdfTexture, 64 )
     }
 }
 
@@ -274,6 +277,6 @@ export class MarchingDepthMaterial extends MeshDepthMaterial {
             depthWrite: true
         })
 
-        modify( this, this.uniforms, sdfTexture )
+        modify( this, this.uniforms, sdfTexture, 16 )
     }
 }
