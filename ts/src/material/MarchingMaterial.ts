@@ -9,7 +9,7 @@ function modify( material: Material, uniforms: {
 ){
     const defines = material.defines || (material.defines = {})
     defines.MARCHING_MATERIAL = "1"
-    defines.MARCHING_STEP = 100
+    defines.MARCHING_STEP = 64
 
     material.onBeforeCompile = shader=>{
 
