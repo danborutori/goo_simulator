@@ -14,13 +14,11 @@ const texture = {
     vertical: {
         albedo: loadTexture( "./asset/wet_v/albedo.jpg" ),
         normal: loadTexture( "./asset/wet_v/normals.jpg" ),
-        roughness: loadTexture( "./asset/wet_v/roughness.jpg" ),
         displacement: loadTexture( "./asset/wet_v/displacement.jpg" ),
     },
     horizontal: {
         albedo: loadTexture( "./asset/wet_h/albedo.jpg" ),
         normal: loadTexture( "./asset/wet_h/normals.jpg" ),
-        roughness: loadTexture( "./asset/wet_h/roughness.jpg" ),
         displacement: loadTexture( "./asset/wet_h/displacement.jpg" ),
     }
 }
@@ -111,6 +109,7 @@ class WetMaterial extends MeshPhysicalMaterial {
                     mixY
                 );
                 gooThickness -= 1.0-wetiness;
+                gooThickness = sign(gooThickness)*pow(abs(gooThickness),0.5);
 
                 diffuseColor.a *= saturate((gooThickness-0.2)/0.6);
                 `
