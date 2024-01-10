@@ -167,8 +167,11 @@ export class Application {
 
     private update( deltaTime: number ){
 
-        this.bunny.quaternion.multiply(q1.setFromAxisAngle(v1.set(0,1,0), Math.PI*deltaTime*this.bunnyRotYDir))
-        .multiply(q1.setFromAxisAngle(v1.set(1,0,0), Math.PI*deltaTime*this.bunnyRotXDir))
+        this.bunny.quaternion.premultiply(
+            q1.setFromAxisAngle(v1.setFromMatrixColumn(this.camera.matrixWorld,0),Math.PI*deltaTime*this.bunnyRotXDir)
+        ).premultiply(
+            q1.setFromAxisAngle(v1.setFromMatrixColumn(this.camera.matrixWorld,1),Math.PI*deltaTime*this.bunnyRotYDir)
+        )
         this.gooSimulator.update(deltaTime,this.renderer)
 
     }
