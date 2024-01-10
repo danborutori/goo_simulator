@@ -7,12 +7,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-import { AmbientLight, PCFShadowMap, Quaternion, Vector3, WebGLRenderer } from "three";
+import { AmbientLight, PCFShadowMap, Quaternion, ShaderChunk, Vector3, WebGLRenderer } from "three";
 import { GooSimulator } from "./GooSimulator.js";
 import { FpsCounter } from "./FpsCounter.js";
 import ReactDOM from "react-dom";
 import React from "react";
 import { GLTFLoader, OrbitControls } from "three/examples/jsm/Addons";
+import { ditherShaderFunction } from "./material/dither.js";
 const v1 = new Vector3;
 const q1 = new Quaternion;
 function createScene() {
@@ -31,6 +32,7 @@ function createScene() {
                 lit.shadow.camera.near = 3.65;
                 lit.shadow.camera.far = 8.51;
                 lit.shadow.camera.updateProjectionMatrix();
+                lit.shadow.bias = -0.005;
             }
         });
         scene.add(new AmbientLight(0x404040));
@@ -46,7 +48,8 @@ export class Application {
         this.scene = scene;
         this.camera = camera;
         this.bunny = bunny;
-        this.bunnyRotDir = 0;
+        this.bunnyRotYDir = 0;
+        this.bunnyRotXDir = 0;
     }
     static create() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -65,7 +68,6 @@ export class Application {
         this.renderer.shadowMap.type = PCFShadowMap;
         this.renderer.debug.checkShaderErrors = false;
         this.renderer.setClearColor(0x6A81B4);
-        this.renderer.setPixelRatio(window.devicePixelRatio);
         this.camera.aspect = mainCanvas.width / mainCanvas.height;
         this.camera.updateProjectionMatrix();
         const controls = new OrbitControls(this.camera, mainCanvas);
@@ -85,19 +87,29 @@ export class Application {
         window.addEventListener("resize", () => { this.onResize(); });
         window.addEventListener("keydown", event => {
             switch (event.key) {
+                case "ArrowUp":
+                    this.bunnyRotXDir = -1;
+                    break;
+                case "ArrowDown":
+                    this.bunnyRotXDir = 1;
+                    break;
                 case "ArrowRight":
-                    this.bunnyRotDir = -1;
+                    this.bunnyRotYDir = -1;
                     break;
                 case "ArrowLeft":
-                    this.bunnyRotDir = 1;
+                    this.bunnyRotYDir = 1;
                     break;
             }
         });
         window.addEventListener("keyup", event => {
             switch (event.key) {
+                case "ArrowUp":
+                case "ArrowDown":
+                    this.bunnyRotXDir = 0;
+                    break;
                 case "ArrowRight":
                 case "ArrowLeft":
-                    this.bunnyRotDir = 0;
+                    this.bunnyRotYDir = 0;
                     break;
             }
         });
@@ -127,7 +139,7 @@ export class Application {
         }, 1000);
     }
     update(deltaTime) {
-        this.bunny.quaternion.multiply(q1.setFromAxisAngle(v1.set(0, 1, 0), Math.PI * deltaTime * this.bunnyRotDir));
+        this.bunny.quaternion.premultiply(q1.setFromAxisAngle(v1.setFromMatrixColumn(this.camera.matrixWorld, 0), Math.PI * deltaTime * this.bunnyRotXDir)).premultiply(q1.setFromAxisAngle(v1.setFromMatrixColumn(this.camera.matrixWorld, 1), Math.PI * deltaTime * this.bunnyRotYDir));
         this.gooSimulator.update(deltaTime, this.renderer);
     }
     render() {
@@ -139,3 +151,10 @@ export class Application {
         this.camera.updateProjectionMatrix();
     }
 }
+ShaderChunk.shadowmap_pars_fragment = `
+    ${ditherShaderFunction}
+    ` + ShaderChunk.shadowmap_pars_fragment.replace("shadowCoord.z += shadowBias;", `
+    float dither = getDither();
+    shadowCoord.xy += vec2(dither,dither)/shadowMapSize;
+    shadowCoord.z += shadowBias*dither;
+    `);
