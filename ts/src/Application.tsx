@@ -26,6 +26,7 @@ async function createScene(){
             lit.shadow.camera.near = 3.65
             lit.shadow.camera.far = 8.51
             lit.shadow.camera.updateProjectionMatrix()
+            lit.shadow.bias = -0.005
         }
     })
 
@@ -180,7 +181,8 @@ ShaderChunk.shadowmap_pars_fragment = `
     `+ShaderChunk.shadowmap_pars_fragment.replace(
     "shadowCoord.z += shadowBias;",
     `
-    shadowCoord.xy += vec2(getDither())/shadowMapSize;
-    shadowCoord.z += shadowBias;
+    float dither = getDither();
+    shadowCoord.xy += vec2(dither,dither)/shadowMapSize;
+    shadowCoord.z += shadowBias*dither;
     `
 )
