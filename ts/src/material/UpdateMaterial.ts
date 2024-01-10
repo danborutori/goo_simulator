@@ -1,6 +1,31 @@
 import { IUniform, NoBlending, ShaderMaterial, Vector3 } from "three";
 import { shaderDistanceFunction, shaderIntersectFunction, shaderStructs } from "three-mesh-bvh";
 
+// reference: https://stackoverflow.com/questions/1144783/how-do-i-replace-all-occurrences-of-a-string-in-javascript
+function escapeRegExp(str: string) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // $& means the whole matched string
+}
+
+function fixForAndroid( code: string){
+    return code.replace(
+        new RegExp("BVH bvh,","g"),
+        `
+        usampler2D bvh_index,
+	    sampler2D bvh_position,
+	    sampler2D bvh_bvhBounds,
+	    usampler2D bvh_bvhContents,
+        `).replace(
+            new RegExp(escapeRegExp("bvh."), "g"),
+            "bvh_"
+        ).replace(
+            new RegExp(escapeRegExp("bvh,"),"g"),
+            "bvh_index,bvh_position,bvh_bvhBounds,bvh_bvhContents,"
+        )
+}
+
+const _shaderIntersectFunction = fixForAndroid(shaderIntersectFunction)
+const _shaderDistanceFunction = fixForAndroid(shaderDistanceFunction)
+
 export class UpdateMaterial extends ShaderMaterial {
 
     constructor(
@@ -53,8 +78,8 @@ export class UpdateMaterial extends ShaderMaterial {
             layout(location = 6) out vec4 outLink3;
 
             ${shaderStructs}
-            ${shaderIntersectFunction}
-            ${shaderDistanceFunction}
+            ${_shaderIntersectFunction}
+            ${_shaderDistanceFunction}
 
             uniform float deltaTime;
             uniform sampler2D tInput[7];
@@ -226,7 +251,11 @@ export class UpdateMaterial extends ShaderMaterial {
                     localSpaceRadius = radius*scale;
 
                     distance = bvhClosestPointToPoint(
-                        bvhUNROLLED_LOOP_INDEX, localPosition,
+                        bvhUNROLLED_LOOP_INDEX.index,
+                        bvhUNROLLED_LOOP_INDEX.position,
+                        bvhUNROLLED_LOOP_INDEX.bvhBounds,
+                        bvhUNROLLED_LOOP_INDEX.bvhContents,
+                        localPosition,
                         faceIndices, 
                         faceNormal, 
                         barycoord,
