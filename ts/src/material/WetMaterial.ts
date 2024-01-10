@@ -215,7 +215,7 @@ export class WetinessContext extends Points {
 
             varying float vWetiness;
 
-            float sampleDepth( vec3 wPos ){
+            float sampleDistance( vec3 wPos ){
                 vec3 gridPos = wPos/gridCellSize+gridSize/2.0;
 
                 vec3 gridPosAligned[8] = vec3[](
@@ -286,7 +286,7 @@ export class WetinessContext extends Points {
 
             void main(){
                 vec4 wPos = colliderMatrix*vec4(position,1);
-                float distance = sampleDepth(wPos.xyz);
+                float distance = sampleDistance(wPos.xyz);
 
                 vWetiness = saturate(1.0-distance/0.001);
 

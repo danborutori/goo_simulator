@@ -58,7 +58,7 @@ function modify( material: Material, uniforms: {
                 return ditherMatrix16x16[int(v.x+v.y*16.0)]/255.0;
             }
 
-            float sampleDepth( vec3 wPos ){
+            float sampleDistance( vec3 wPos ){
                 vec3 gridPos = wPos/gridCellSize+gridSize/2.0;
 
                 vec3 gridPosAligned[8] = vec3[](
@@ -162,7 +162,7 @@ function modify( material: Material, uniforms: {
             #pragma unroll_loop_start
             for( int i=0; i<${marchingStep}; i++ ){
                 wPos = cameraWorldMatrix*vec4(curVPos,1);
-                distance = sampleDepth(wPos.xyz);
+                distance = sampleDistance(wPos.xyz);
                 curDistance = distance;
 
                 if( sign(distance)*pow(abs(distance),0.125)<=0.613237564 ){
@@ -206,7 +206,7 @@ function modify( material: Material, uniforms: {
                 z = UNROLLED_LOOP_INDEX/9-1;
             
                 dir = vec3( x, y, z );
-                distance = sampleDepth(curWPos+dir*gridCellSize);
+                distance = sampleDistance(curWPos+dir*gridCellSize);
                 normal += dir*(distance-curDistance);            
             }
             #pragma unroll_loop_end
