@@ -8,7 +8,7 @@ import { ParticleMaterial } from "./material/ParticleMaterial.js";
 import { UpdateGridMaterial } from "./material/UpdateGridMaterial.js";
 import { UpdateMaterial } from "./material/UpdateMaterial.js";
 import { RecycleParticleMaterial } from "./material/RecycleParticleMaterial.js";
-import { applyWetMaterial } from "./material/WetMaterial.js";
+import { WetinessContext } from "./material/WetMaterial.js";
 
 const v2_1 = new Vector2
 
@@ -241,6 +241,7 @@ export class GooSimulator extends Group {
     private colliders: {
         mesh: Mesh
         bvhUniform: MeshBVHUniformStruct
+        wetinessCtx: WetinessContext
     }[]
 
     private sdfRendertarget: WebGLRenderTarget
@@ -259,7 +260,6 @@ export class GooSimulator extends Group {
     ){
         super()
 
-        for( let collider of colliders )applyWetMaterial(collider)
         this.updateMaterial = new UpdateMaterial(colliders.length)
 
         const particleRendertargetWidth = MathUtils.ceilPowerOfTwo(Math.sqrt(particleCount))
@@ -297,16 +297,6 @@ export class GooSimulator extends Group {
             wrapT: ClampToEdgeWrapping
         })
 
-        this.colliders = colliders.map( m=>{
-            const bvh = new MeshBVH(m.geometry)
-            const bvhUniform = new MeshBVHUniformStruct()
-            bvhUniform.updateFrom(bvh)
-            return {
-                mesh: m,
-                bvhUniform: bvhUniform
-            }
-        })
-
         const sdfRenderTargetWidth = MathUtils.ceilPowerOfTwo(Math.pow(gridSize,3/2))
         this.sdfRendertarget = new WebGLRenderTarget(sdfRenderTargetWidth,sdfRenderTargetWidth, {
             format: RedFormat,
@@ -316,6 +306,17 @@ export class GooSimulator extends Group {
             generateMipmaps: false,
             wrapS: ClampToEdgeWrapping,
             wrapT: ClampToEdgeWrapping
+        })
+
+        this.colliders = colliders.map( m=>{
+            const bvh = new MeshBVH(m.geometry)
+            const bvhUniform = new MeshBVHUniformStruct()
+            bvhUniform.updateFrom(bvh)
+            return {
+                mesh: m,
+                bvhUniform: bvhUniform,
+                wetinessCtx: new WetinessContext(m,this.sdfRendertarget.texture,gridSize,gridCellSize,m.matrixWorld)
+            }
         })
 
         const group = new Group()
@@ -433,6 +434,9 @@ export class GooSimulator extends Group {
                 this.colliders,
                 radius
             )
+            for( let collider of this.colliders ){
+                collider.wetinessCtx.update( renderer )
+            }
         }
     }
 

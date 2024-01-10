@@ -1,6 +1,7 @@
-import { Mesh, MeshPhysicalMaterial, RepeatWrapping, TextureLoader } from "three";
+import { AdditiveBlending, BufferAttribute, BufferGeometry, HalfFloatType, MathUtils, Matrix4, Mesh, MeshPhysicalMaterial, NearestFilter, OrthographicCamera, Points, RedFormat, RepeatWrapping, ShaderMaterial, Texture, TextureLoader, Vector2, WebGLRenderTarget, WebGLRenderer } from "three";
 import { gooColor } from "../deviceSetting.js";
 
+const v_2 = new Vector2
 const loader = new TextureLoader()
 
 function loadTexture( url: string ){
@@ -25,7 +26,9 @@ const texture = {
 
 class WetMaterial extends MeshPhysicalMaterial {
 
-    constructor(){
+    constructor(
+        tWetiness: Texture
+    ){
         super({
             color: gooColor,
             roughness: 0.1,
@@ -46,10 +49,16 @@ class WetMaterial extends MeshPhysicalMaterial {
             shader.uniforms.tAlbedoH = { value: texture.horizontal.albedo }
             shader.uniforms.tNormalH = { value: texture.horizontal.normal }
             shader.uniforms.tDispH = { value: texture.horizontal.displacement }
+            shader.uniforms.tWetiness = { value: tWetiness }
 
             shader.vertexShader = `
+                uniform sampler2D tWetiness;
+
+                attribute vec2 wetinessUv;
+
                 varying vec3 vObjPosition;
-                varying vec3 vObjNormal;
+                varying vec3 vObjNormal;                
+                varying float vWetiness;
             `+shader.vertexShader.replace(
                 "#include <uv_vertex>",
                 `
@@ -63,6 +72,7 @@ class WetMaterial extends MeshPhysicalMaterial {
                 vObjPosition = position*vObjPositionScale*2.0;
                 vObjPosition.y *= 0.25;
                 vObjNormal = normal;
+                vWetiness = saturate(texture2D(tWetiness,wetinessUv).r);
                 `
             )
             shader.fragmentShader = `
@@ -75,6 +85,7 @@ class WetMaterial extends MeshPhysicalMaterial {
 
                 varying vec3 vObjPosition;
                 varying vec3 vObjNormal;
+                varying float vWetiness;
             `+shader.fragmentShader.replace(
                 "#include <map_fragment>",
                 `
@@ -98,7 +109,7 @@ class WetMaterial extends MeshPhysicalMaterial {
                 float dispY = texture2D( tDispH, vObjPosition.xz ).r;
                 float dispZ = texture2D( tDispV, vObjPosition.xy ).r;
 
-                float wetiness = 0.8;
+                float wetiness = vWetiness;
                 float gooThickness = mix(
                     mix(
                         dispX,
@@ -111,7 +122,7 @@ class WetMaterial extends MeshPhysicalMaterial {
                 gooThickness -= 1.0-wetiness;
                 gooThickness = sign(gooThickness)*pow(abs(gooThickness),0.5);
 
-                diffuseColor.a *= saturate((gooThickness-0.2)/0.6);
+                diffuseColor.a *= saturate((gooThickness-0.2)/0.6)*0.5;
                 `
             ).replace(
                 "#include <normal_fragment_maps>",
@@ -139,12 +150,190 @@ class WetMaterial extends MeshPhysicalMaterial {
 
 }
 
-const wetMaterial = new WetMaterial()
+function applyWetMaterial(
+    mesh: Mesh,
+    wetinessUv: BufferAttribute,
+    tWetiness: Texture
+){
+    const g = mesh.geometry
+    g.setAttribute( "wetinessUv", wetinessUv )
 
-export function applyWetMaterial( mesh: Mesh ){
-    
+    g.clearGroups()    
+    g.addGroup(0,mesh.geometry.index!.count,0)
+    g.addGroup(0,mesh.geometry.index!.count,1)
+ 
+    const wetMaterial = new WetMaterial(tWetiness)
     mesh.material = [mesh.material as THREE.Material, wetMaterial]
-    mesh.geometry.clearGroups()    
-    mesh.geometry.addGroup(0,mesh.geometry.index!.count,0)
-    mesh.geometry.addGroup(0,mesh.geometry.index!.count,1)
 }
+
+const dummyCamera = new OrthographicCamera()
+export class WetinessContext extends Points {   
+    
+    readonly wetinessRenderTarget: WebGLRenderTarget
+
+    constructor(
+        mesh: Mesh,
+        sdfTexture: Texture,
+        gridSize: number,
+        gridCellSize: number,
+        colliderMatrix: Matrix4
+    ){
+        const g = mesh.geometry
+        const position = g.attributes.position
+        const wetTextureSize = MathUtils.ceilPowerOfTwo(Math.sqrt(position.count))
+        const wetinessUv = new BufferAttribute( new Float32Array(position.count*2), 2 )
+        for( let i=0; i<position.count; i++ ){
+            v_2.set(
+                i%wetTextureSize,
+                Math.floor(i/wetTextureSize)
+            ).addScalar(0.5).divideScalar(wetTextureSize)
+            v_2.toArray( wetinessUv.array, i*2 )
+        }
+        wetinessUv.needsUpdate = true
+
+        const g2 = new BufferGeometry()
+
+        g2.setAttribute( "position", position )
+        g2.setAttribute( "wetinessUv", wetinessUv )
+
+        const mat = new ShaderMaterial({
+            uniforms: {
+                tSDF: { value: sdfTexture },
+                gridSize: { value: gridSize },
+                gridCellSize: { value: gridCellSize },
+                colliderMatrix: { value: colliderMatrix }
+            },
+            vertexShader: `
+            #include <common>
+
+            uniform sampler2D tSDF;
+            uniform float gridSize;
+            uniform float gridCellSize;
+            uniform mat4 colliderMatrix;
+
+            attribute vec2 wetinessUv;
+
+            varying float vWetiness;
+
+            float sampleDepth( vec3 wPos ){
+                vec3 gridPos = wPos/gridCellSize+gridSize/2.0;
+
+                vec3 gridPosAligned[8] = vec3[](
+                    vec3(ceil(gridPos.x),ceil(gridPos.y),ceil(gridPos.z)),
+                    vec3(ceil(gridPos.x),ceil(gridPos.y),floor(gridPos.z)),
+                    vec3(ceil(gridPos.x),floor(gridPos.y),ceil(gridPos.z)),
+                    vec3(ceil(gridPos.x),floor(gridPos.y),floor(gridPos.z)),
+                    vec3(floor(gridPos.x),ceil(gridPos.y),ceil(gridPos.z)),
+                    vec3(floor(gridPos.x),ceil(gridPos.y),floor(gridPos.z)),
+                    vec3(floor(gridPos.x),floor(gridPos.y),ceil(gridPos.z)),
+                    vec3(floor(gridPos.x),floor(gridPos.y),floor(gridPos.z))
+                );
+                float distances[8];
+
+                vec3 gridPosClamped;
+                float gridId;
+                vec2 gridTextureSize = vec2(textureSize(tSDF,0));
+                vec2 uv;
+                #pragma unroll_loop_start 
+                for ( int i = 0; i < 8; i ++ ) {
+                    gridPosClamped = clamp(
+                        gridPosAligned[ i ],
+                        0.0,
+                        gridSize-1.0
+                    );
+                    gridId = gridPosClamped.x+(gridPosClamped.y+gridPosClamped.z*gridSize)*gridSize;
+                    uv = vec2(
+                        mod( gridId, gridTextureSize.x ),
+                        floor(gridId/gridTextureSize.y)
+                    )/gridTextureSize;
+
+                    distances[ i ] = texture2D(tSDF, uv).r;            
+                }
+                #pragma unroll_loop_end
+                vec3 blend = 1.0-(gridPos-gridPosAligned[7]);
+                float distance = mix(
+                    mix(
+                        mix(
+                            distances[0],
+                            distances[4],
+                            blend.x
+                        ),
+                        mix(
+                            distances[2],
+                            distances[6],
+                            blend.x
+                        ),
+                        blend.y
+                    ),
+                    mix(
+                        mix(
+                            distances[1],
+                            distances[5],
+                            blend.x
+                        ),
+                        mix(
+                            distances[3],
+                            distances[7],
+                            blend.x
+                        ),
+                        blend.y
+                    ),
+                    blend.z
+                );
+
+                return distance;
+            }
+
+            void main(){
+                vec4 wPos = colliderMatrix*vec4(position,1);
+                float distance = sampleDepth(wPos.xyz);
+
+                vWetiness = saturate(1.0-distance/0.001);
+
+                gl_Position = vec4( wetinessUv*2.0-1.0, 0, 1 );
+                gl_PointSize = 1.0;
+            }
+            `,
+            fragmentShader: `
+            varying float vWetiness;
+
+            void main(){
+                gl_FragColor = vec4(vWetiness,0,0,1);
+            }
+            `,
+            transparent: true,
+            blending: AdditiveBlending
+        })
+
+        super( g2, mat )
+        this.wetinessRenderTarget = new WebGLRenderTarget(wetTextureSize,wetTextureSize,{
+            format: RedFormat,
+            type: HalfFloatType,
+            minFilter: NearestFilter,
+            magFilter: NearestFilter,
+            generateMipmaps: false
+        })
+
+        applyWetMaterial(
+            mesh,
+            wetinessUv,
+            this.wetinessRenderTarget.texture
+        )
+
+    }
+
+    update( renderer: WebGLRenderer ){
+        const restore = {
+            renderTarget: renderer.getRenderTarget(),
+            autoClear: renderer.autoClear
+        }
+
+        renderer.autoClear = false
+        renderer.setRenderTarget(this.wetinessRenderTarget)
+        renderer.render( this, dummyCamera )
+
+        renderer.setRenderTarget(restore.renderTarget)
+        renderer.autoClear = restore.autoClear
+    }
+}
+

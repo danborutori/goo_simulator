@@ -75,7 +75,7 @@ function modify( material: Material, uniforms: {
 
                 vec3 gridPosClamped;
                 float gridId;
-                vec2 gridTextureSize;
+                vec2 gridTextureSize = vec2(textureSize(tSDF,0));
                 vec2 uv;
                 #pragma unroll_loop_start 
                 for ( int i = 0; i < 8; i ++ ) {
@@ -85,7 +85,6 @@ function modify( material: Material, uniforms: {
                         gridSize-1.0
                     );
                     gridId = gridPosClamped.x+(gridPosClamped.y+gridPosClamped.z*gridSize)*gridSize;
-                    gridTextureSize = vec2(textureSize(tSDF,0));
                     uv = vec2(
                         mod( gridId, gridTextureSize.x ),
                         floor(gridId/gridTextureSize.y)

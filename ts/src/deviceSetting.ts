@@ -4,7 +4,7 @@ function detectDeviceType(){
 
 const deviceType = detectDeviceType()
 
-export const gooColor = 0xff0000
+export const gooColor = 0x00ff00
 
 export const deviceSetting = (function(){
     switch(deviceType){
