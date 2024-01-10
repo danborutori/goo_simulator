@@ -8,6 +8,7 @@ import { ParticleMaterial } from "./material/ParticleMaterial.js";
 import { UpdateGridMaterial } from "./material/UpdateGridMaterial.js";
 import { UpdateMaterial } from "./material/UpdateMaterial.js";
 import { RecycleParticleMaterial } from "./material/RecycleParticleMaterial.js";
+import { applyWetMaterial } from "./material/WetMaterial.js";
 
 const v2_1 = new Vector2
 
@@ -258,6 +259,7 @@ export class GooSimulator extends Group {
     ){
         super()
 
+        for( let collider of colliders )applyWetMaterial(collider)
         this.updateMaterial = new UpdateMaterial(colliders.length)
 
         const particleRendertargetWidth = MathUtils.ceilPowerOfTwo(Math.sqrt(particleCount))

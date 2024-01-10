@@ -4,6 +4,8 @@ function detectDeviceType(){
 
 const deviceType = detectDeviceType()
 
+export const gooColor = 0xff0000
+
 export const deviceSetting = (function(){
     switch(deviceType){
         case "Desktop":

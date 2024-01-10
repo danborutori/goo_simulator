@@ -1,5 +1,5 @@
 import { Texture, FrontSide, Vector2, Material, MeshDepthMaterial, MeshPhysicalMaterial } from "three";
-import { deviceSetting } from "../deviceSetting.js";
+import { deviceSetting, gooColor } from "../deviceSetting.js";
 
 function modify( material: Material, uniforms: {
         resolution: { value: Vector2 }
@@ -250,7 +250,7 @@ export class MarchingMaterial extends MeshPhysicalMaterial {
         sdfTexture: Texture
     ){
         super({
-            color: 0x00FF00,
+            color: gooColor,
             roughness: 0.1,
             transmission: 0.5,
             depthTest: true,
