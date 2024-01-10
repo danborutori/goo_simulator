@@ -1,4 +1,5 @@
 import { Texture, FrontSide, Vector2, Material, MeshDepthMaterial, MeshPhysicalMaterial } from "three";
+import { deviceSetting } from "../deviceSetting.js";
 
 function modify( material: Material, uniforms: {
         resolution: { value: Vector2 }
@@ -258,7 +259,7 @@ export class MarchingMaterial extends MeshPhysicalMaterial {
             shadowSide: FrontSide
         })
 
-        modify( this, this.uniforms, sdfTexture, 64 )
+        modify( this, this.uniforms, sdfTexture, deviceSetting.rayMarchingStep )
     }
 }
 
@@ -277,6 +278,6 @@ export class MarchingDepthMaterial extends MeshDepthMaterial {
             depthWrite: true
         })
 
-        modify( this, this.uniforms, sdfTexture, 16 )
+        modify( this, this.uniforms, sdfTexture, deviceSetting.shadowRayMarchingStep )
     }
 }
