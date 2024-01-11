@@ -1,4 +1,4 @@
-import { Camera, Color, FrontSide, HalfFloatType, LinearFilter, Mesh, MeshPhysicalMaterial, NoBlending, Object3D, PlaneGeometry, RGBAFormat, ShaderMaterial, Vector2, WebGLMultipleRenderTargets, WebGLRenderer } from "three";
+import { Camera, Color, FrontSide, HalfFloatType, LinearFilter, Matrix4, Mesh, MeshPhysicalMaterial, NoBlending, Object3D, PlaneGeometry, RGBAFormat, ShaderMaterial, Vector2, WebGLMultipleRenderTargets, WebGLRenderer } from "three";
 import { gooColor } from "./deviceSetting.js";
 import { FullScreenQuad } from "three/examples/jsm/Addons";
 
@@ -76,7 +76,7 @@ class BlurHelper {
         let readBuffer = rendertarget
         let writeBuffer = backbuffer
 
-        for( let i=0; i<8; i++ ){
+        for( let i=0; i<16; i++ ){
 
             blurMaterial.uniforms.tNormal.value = readBuffer.texture[0]
             blurMaterial.uniforms.tPosition.value = readBuffer.texture[1]
@@ -109,8 +109,8 @@ export class GooPlane extends Mesh {
     ){
         super(geometry)
 
+        const cameraWorldMatrix = { value: new Matrix4 }
         const mat = new MeshPhysicalMaterial({
-            map: this.rendertarget.texture[0],
             color: gooColor,
             roughness: 0.1,
             transmission: 0.5,
@@ -120,35 +120,86 @@ export class GooPlane extends Mesh {
             alphaTest: 0.5
         })
         mat.onBeforeCompile = shader=>{
+            shader.uniforms.tNormal = { value: this.rendertarget.texture[0] }
             shader.uniforms.tPosition = { value: this.rendertarget.texture[1] }
+            shader.uniforms.cameraWorldMatrix = cameraWorldMatrix
 
-            shader.vertexShader = shader.vertexShader.replace(
+            shader.vertexShader = `
+                varying vec2 vUv;
+            `+shader.vertexShader.replace(
                 "#include <project_vertex>",
                 `
                 #include <project_vertex>
     
                 gl_Position = vec4(position,1);
+
+                vUv = uv;
                 `
             )
 
             shader.fragmentShader = `
+                uniform sampler2D tNormal;
                 uniform sampler2D tPosition;
-            `+shader.fragmentShader.replace(
-                "#include <dithering_fragment>",
-                `
-                #include <dithering_fragment>
+                uniform mat4 cameraWorldMatrix;
 
-                gl_FragColor = vec4(normalize(sampledDiffuseColor.xyz),sampledDiffuseColor.w);
-                vec4 viewPos = projectionMatrix*texture2D(tPosition, vMapUv);
-                gl_FragDepth = viewPos.z/viewPos.w*0.5+0.5;
+                varying vec2 vUv;
+
+                #if NUM_SPOT_LIGHT_COORDS > 0
+
+                    uniform mat4 spotLightMatrix[ NUM_SPOT_LIGHT_COORDS ];
+
+                #endif
+            `+shader.fragmentShader.replace(
+                "void main() {",
+                `
+                void main() {
+                    vec4 viewPos = texture2D(tPosition, vUv);
+                    vec4 screenPos = projectionMatrix*viewPos;
+                    screenPos /= screenPos.w;
+
+                    gl_FragDepth = screenPos.z*0.5+0.5;
+                    vec3 vViewPosition = -viewPos.xyz;
+                    vec3 vWorldPosition = (cameraWorldMatrix*vec4(viewPos.xyz,1)).xyz;
+                `
+            ).replace(
+                "#include <map_fragment>",
+                `
+                #include <map_fragment>
+                diffuseColor.a *= viewPos.a;
+                `
+            ).replace(
+                "#include <clearcoat_normal_fragment_maps>",
+                `
+                #include <clearcoat_normal_fragment_maps>
+
+                normal = normalize(texture2D(tNormal, vUv).xyz);
+                `
+            ).replace(
+                "#include <lights_fragment_begin>",
+                `
+                #ifdef USE_SHADOWMAP
+                #if NUM_SPOT_LIGHT_COORDS > 0
+                vec4 vSpotLightCoord[ NUM_SPOT_LIGHT_COORDS ];
+    
+                for( int i=0; i<NUM_SPOT_LIGHT_COORDS; i++ ){
+                    vSpotLightCoord[ i ] = spotLightMatrix[ i ]*vec4(vWorldPosition,1);
+                }
+                #endif
+                #endif
+    
+                #include <lights_fragment_begin>
                 `
             )
         }
         this.material = mat
+
+        this.onBeforeRender = (_, __, camera)=>{
+            cameraWorldMatrix.value.copy(camera.matrixWorld)
+        }
     }
 
     update( renderer: WebGLRenderer, camera: Camera ){
-        renderer.getDrawingBufferSize(v_2).divideScalar(4).floor()
+        renderer.getDrawingBufferSize(v_2).divideScalar(2).floor()
         if( this.rendertarget.width!=v_2.width || this.rendertarget.height!=v_2.height ){
             this.rendertarget.setSize(v_2.x, v_2.y)
             this.backBuffer.setSize(v_2.x, v_2.y)
