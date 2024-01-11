@@ -172,7 +172,7 @@ export class Application {
         ).premultiply(
             q1.setFromAxisAngle(v1.setFromMatrixColumn(this.camera.matrixWorld,1),Math.PI*deltaTime*this.bunnyRotYDir)
         )
-        this.gooSimulator.update(deltaTime,this.renderer)
+        this.gooSimulator.update(deltaTime,this.renderer, this.camera)
 
     }
 

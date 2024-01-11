@@ -1,20 +1,20 @@
-import { IUniform, MeshStandardMaterial, Texture } from "three";
+import { IUniform, Texture } from "three";
+import { ViewNormalPositionMaterial } from "./ViewNormalPositionMaterial.js";
 
-export class ParticleMaterial extends MeshStandardMaterial {
+export class ParticleMaterial extends ViewNormalPositionMaterial {
     readonly uniforms = {
         tPosition: { value: null } as IUniform<Texture | null>
     }
 
     constructor(){
-        super({
-            color: 0xff0000,
-            roughness: 0
-        })
+        super()
 
         const defines = this.defines || (this.defines = {})
         defines.PARTICLE_MATERIAL = "1"
 
-        this.onBeforeCompile = shader=>{
+        const onBeforeCompile = this.onBeforeCompile
+        this.onBeforeCompile = (shader,renderer)=>{
+            onBeforeCompile(shader,renderer)
             Object.assign(shader.uniforms, this.uniforms)
 
             shader.vertexShader = `

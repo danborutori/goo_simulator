@@ -1,7 +1,6 @@
-import { BufferAttribute, BufferGeometry, ClampToEdgeWrapping, Color, FloatType, Group, IUniform, InstancedBufferAttribute, InstancedMesh, LineBasicMaterial, LineSegments, MathUtils, Mesh, NearestFilter, OrthographicCamera, PlaneGeometry, RGBADepthPacking, RGBAFormat, RedFormat, SphereGeometry, Texture, Vector2, Vector3, WebGLMultipleRenderTargets, WebGLRenderTarget, WebGLRenderer } from "three";
+import { BufferAttribute, BufferGeometry, Camera, CapsuleGeometry, ClampToEdgeWrapping, Color, FloatType, Group, IUniform, InstancedBufferAttribute, InstancedMesh, MathUtils, Mesh, NearestFilter, OrthographicCamera, RGBAFormat, RedFormat, SphereGeometry, Texture, Vector2, Vector3, WebGLMultipleRenderTargets, WebGLRenderTarget, WebGLRenderer } from "three";
 import { MeshBVH, MeshBVHUniformStruct } from "three-mesh-bvh";
 import { SDFGenerator } from "./SDFGenerator.js";
-import { MarchingDepthMaterial, MarchingMaterial } from "./material/MarchingMaterial.js";
 import { InitMaterial } from "./material/InitMaterial.js";
 import { FullScreenQuad } from "three/examples/jsm/Addons";
 import { ParticleMaterial } from "./material/ParticleMaterial.js";
@@ -9,6 +8,8 @@ import { UpdateGridMaterial } from "./material/UpdateGridMaterial.js";
 import { UpdateMaterial } from "./material/UpdateMaterial.js";
 import { RecycleParticleMaterial } from "./material/RecycleParticleMaterial.js";
 import { WetinessContext } from "./material/WetMaterial.js";
+import { GooPlane } from "./GooPlane.js";
+import { ViewNormalPositionMaterial } from "./material/ViewNormalPositionMaterial.js";
 
 const v2_1 = new Vector2
 
@@ -65,38 +66,37 @@ function createLinkMesh(
     tPosition: IUniform,
     tLink: IUniform
 ){
-    const g = new BufferGeometry()
+    const g = new CapsuleGeometry(radius*0.25+radius,1)
 
-    const position = new BufferAttribute( new Float32Array(particleCount*3*8), 3)
-    const uv = new BufferAttribute( new Float32Array(particleCount*2*8), 2)
-    const linkIndex = new BufferAttribute( new Int32Array(particleCount*8), 1)
+    const instanceId = new InstancedBufferAttribute( new Float32Array(particleCount*2*4), 2)
+    const linkIndex = new InstancedBufferAttribute( new Int32Array(particleCount*4), 1)
 
     for( let i=0; i<particleCount; i++ ){
         v2_1.set(
             i%particleRendertargetWidth,
             Math.floor(i/particleRendertargetWidth)
         ).addScalar(0.5).divideScalar(particleRendertargetWidth)
-        for( let j=0; j<8; j++ )
-            uv.setXY(i*8+j,v2_1.x,v2_1.y)
-        linkIndex.setX(i*8,-1)
-        linkIndex.setX(i*8+1,0)
-        linkIndex.setX(i*8+2,-1)
-        linkIndex.setX(i*8+3,1)
-        linkIndex.setX(i*8+4,-1)
-        linkIndex.setX(i*8+5,2)
-        linkIndex.setX(i*8+6,-1)
-        linkIndex.setX(i*8+7,3)
+        for( let j=0; j<4; j++ )
+            instanceId.setXY(i*4+j,v2_1.x,v2_1.y)
+        linkIndex.setX(i*4,0)
+        linkIndex.setX(i*4+1,1)
+        linkIndex.setX(i*4+2,2)
+        linkIndex.setX(i*4+3,3)
     }
+    instanceId.needsUpdate = true
+    linkIndex.needsUpdate = true
 
-    g.setAttribute("position", position)
-    g.setAttribute("uv", uv)
+    g.setAttribute("instanceId", instanceId)
     g.setAttribute("linkIndex", linkIndex)
 
-    const material = new LineBasicMaterial({
-        color: 0x00ff00
-    })
+    const material = new ViewNormalPositionMaterial()
 
-    material.onBeforeCompile = shader=>{
+    const defines = material.defines || (material.defines = {} )
+    defines.LINK_MESH_MATERIAL = "1"
+
+    const onBeforeCompile = material.onBeforeCompile
+    material.onBeforeCompile = (shader,renderer)=>{
+        onBeforeCompile(shader,renderer)
         shader.uniforms.tPosition = tPosition
         shader.uniforms.tLink = tLink
 
@@ -104,30 +104,64 @@ function createLinkMesh(
         uniform sampler2D tPosition;
         uniform sampler2D tLink;
 
+        attribute vec2 instanceId;
         attribute int linkIndex;
+
+        mat4 rotateAndTransformToOffset(vec3 axisY, vec3 offset) {
+            // Calculate the axis of rotation
+            vec3 axisX = normalize( cross(vec3(0.0, 1.0, 0.0), axisY) );
+            vec3 axisZ = cross( axisX, axisY );
+            
+            mat4 rotationMatrix = mat4(
+                axisX, 0.0,
+                axisY, 0.0,
+                axisZ, 0.0,
+                offset, 1.0
+            );
+            
+            return rotationMatrix;
+        }
         `+shader.vertexShader.replace(
             "void main() {",
             `
             void main() {
-                vec2 pointUv = uv;
+                vec3 _position = position;
+                vec3 positionA = texture2D( tPosition, instanceId ).xyz;
+                vec3 dir = vec3(0,1,0);
+                {
+                    vec3 positionB = positionA;
 
-                if( linkIndex>=0 ){
-                    float id = texture2D( tLink, uv )[linkIndex];
+                    float id = texture2D( tLink, instanceId )[linkIndex];
                     if( id>=0.0 ){
                         vec2 tPositionSize = vec2(textureSize( tPosition, 0 ));
-                        pointUv = (vec2(
+                        vec2 pointUv = (vec2(
                             mod( id, tPositionSize.x ),
                             floor( id/tPositionSize.x )
                         )+0.5)/tPositionSize;
+
+                        positionB = texture2D( tPosition, pointUv ).xyz;;
                     }
+
+                    vec3 v = positionB-positionA;
+                    float len = length(v);
+
+                    if( _position.y>0.0 ){
+                        _position.y -= 0.5-len;
+                    }else{
+                        _position.y += 0.5;
+                    }
+
+                    if( len!=0.0 )
+                        dir = normalize(v);
                 }
 
-                vec3 position = texture2D( tPosition, pointUv ).xyz;
+                vec3 position = _position;
+                mat4 instanceMatrix = rotateAndTransformToOffset(dir, positionA);
             `
         )
     }
 
-    const mesh = new LineSegments(g, material)
+    const mesh = new InstancedMesh(g, material, particleCount*4)
 
     return mesh
 }
@@ -139,41 +173,38 @@ function createSurfaceLinkMesh(
     tSurfaceLink: IUniform,
     collders: Mesh[]
 ){
-    const g = new BufferGeometry()
+    const g = new CapsuleGeometry(radius*0.25+radius,1)
 
-    const position = new BufferAttribute( new Float32Array(particleCount*3*8), 3)
-    const uv = new BufferAttribute( new Float32Array(particleCount*2*8), 2)
-    const linkIndex = new BufferAttribute( new Int32Array(particleCount*8), 1)
+    const instanceId = new InstancedBufferAttribute( new Float32Array(particleCount*2*4), 2)
+    const linkIndex = new InstancedBufferAttribute( new Int32Array(particleCount*4), 1)
 
     for( let i=0; i<particleCount; i++ ){
         v2_1.set(
             i%particleRendertargetWidth,
             Math.floor(i/particleRendertargetWidth)
         ).addScalar(0.5).divideScalar(particleRendertargetWidth)
-        for( let j=0; j<8; j++ )
-            uv.setXY(i*8+j,v2_1.x,v2_1.y)
-        linkIndex.setX(i*8,-1)
-        linkIndex.setX(i*8+1,0)
-        linkIndex.setX(i*8+2,-1)
-        linkIndex.setX(i*8+3,1)
-        linkIndex.setX(i*8+4,-1)
-        linkIndex.setX(i*8+5,2)
-        linkIndex.setX(i*8+6,-1)
-        linkIndex.setX(i*8+7,3)
+        for( let j=0; j<4; j++ )
+            instanceId.setXY(i*4+j,v2_1.x,v2_1.y)
+        linkIndex.setX(i*4,0)
+        linkIndex.setX(i*4+1,1)
+        linkIndex.setX(i*4+2,2)
+        linkIndex.setX(i*4+3,3)
     }
+    instanceId.needsUpdate = true
+    linkIndex.needsUpdate = true
 
-    g.setAttribute("position", position)
-    g.setAttribute("uv", uv)
+    g.setAttribute("instanceId", instanceId)
     g.setAttribute("linkIndex", linkIndex)
 
-    const material = new LineBasicMaterial({
-        color: 0xffff00
-    })
+    const material = new ViewNormalPositionMaterial()
 
     const defines = material.defines || (material.defines = {})
+    defines.SUERFACE_LINK_MATERIAL = "1"
     defines.NUM_BVH = collders.length
 
-    material.onBeforeCompile = shader=>{
+    const onBeforeCompile = material.onBeforeCompile
+    material.onBeforeCompile = (shader,renderer)=>{
+        onBeforeCompile(shader,renderer)
         shader.uniforms.tPosition = tPosition
         shader.uniforms.tSurfaceLink = tSurfaceLink
         shader.uniforms.bvhMatrix = { value: collders.map(m=>m.matrixWorld) }
@@ -183,31 +214,65 @@ function createSurfaceLinkMesh(
         uniform sampler2D tSurfaceLink[4];
         uniform mat4 bvhMatrix[NUM_BVH];
 
+        attribute vec2 instanceId;
         attribute int linkIndex;
+
+        mat4 rotateAndTransformToOffset(vec3 axisY, vec3 offset) {
+            // Calculate the axis of rotation
+            vec3 axisX = normalize( cross(vec3(0.0, 1.0, 0.0), axisY) );
+            vec3 axisZ = cross( axisX, axisY );
+            
+            mat4 rotationMatrix = mat4(
+                axisX, 0.0,
+                axisY, 0.0,
+                axisZ, 0.0,
+                offset, 1.0
+            );
+            
+            return rotationMatrix;
+        }
         `+shader.vertexShader.replace(
             "void main() {",
             `
-            void main() {
-                vec3 position = texture2D( tPosition, uv ).xyz;                
-                if( linkIndex>=0 ){
+            void main() {                
+                vec3 _position = position;
+                vec3 positionA = texture2D( tPosition, instanceId ).xyz;
+                vec3 dir = vec3(0,1,0);
+                {
+                    vec3 positionB = positionA;
+
                     vec4 surfaceLinks[4] = vec4[4](
-                        texture2D( tSurfaceLink[ 0 ], uv ),
-                        texture2D( tSurfaceLink[ 1 ], uv ),
-                        texture2D( tSurfaceLink[ 2 ], uv ),
-                        texture2D( tSurfaceLink[ 3 ], uv )
+                        texture2D( tSurfaceLink[ 0 ], instanceId ),
+                        texture2D( tSurfaceLink[ 1 ], instanceId ),
+                        texture2D( tSurfaceLink[ 2 ], instanceId ),
+                        texture2D( tSurfaceLink[ 3 ], instanceId )
                     );
                     vec4 surfaceLink = surfaceLinks[ linkIndex ];
                     int id = int( surfaceLink.w );
                     if( id>=0 ){
-                        position = (bvhMatrix[id]*vec4(surfaceLink.xyz,1)).xyz;
+                        positionB = (bvhMatrix[id]*vec4(surfaceLink.xyz,1)).xyz;
                     }
+
+                    vec3 v = positionB-positionA;
+                    float len = length(v);
+
+                    if( _position.y>0.0 ){
+                        _position.y -= 0.5-len;
+                    }else{
+                        _position.y += 0.5;
+                    }
+
+                    if( len!=0.0 )
+                        dir = normalize(v);
                 }
 
+                vec3 position = _position;
+                mat4 instanceMatrix = rotateAndTransformToOffset(dir, positionA);
             `
         )
     }
 
-    const mesh = new LineSegments(g, material)
+    const mesh = new InstancedMesh(g, material, particleCount*4)
 
     return mesh
 }
@@ -236,7 +301,6 @@ export class GooSimulator extends Group {
     private particleInstancedMesh: InstancedMesh
     private gridRenderTarget: WebGLRenderTarget
 
-    private marchingMesh: Mesh
     private deltaTime = 0
     private colliders: {
         mesh: Mesh
@@ -251,6 +315,8 @@ export class GooSimulator extends Group {
         tSurfaceLink: { value: [] } as IUniform<Texture[] | null>
     }
     private updateMaterial: UpdateMaterial
+
+    private gooPlane: GooPlane
 
     constructor(
         renderer: WebGLRenderer,
@@ -320,13 +386,13 @@ export class GooSimulator extends Group {
         })
 
         const group = new Group()
-        group.visible = false
-        this.add( group )
+        // group.visible = false
+        // this.add( group )
 
         const particleMaterial = new ParticleMaterial()
         particleMaterial.uniforms.tPosition = this.uniforms.tPosition
         const instancedMesh = new InstancedMesh(
-            new SphereGeometry(radius,8,4),
+            new SphereGeometry(radius*2,8,4),
             particleMaterial,
             particleCount
         )
@@ -358,25 +424,12 @@ export class GooSimulator extends Group {
         surfaceLinkLine.receiveShadow = false
         group.add(surfaceLinkLine)
 
-        const marchingMaterial = new MarchingMaterial(this.sdfRendertarget.texture)
-        marchingMaterial.uniforms.gridSize.value = gridSize
-        marchingMaterial.uniforms.gridCellSize.value = gridCellSize
-        const marchingDepthMaterial = new MarchingDepthMaterial(this.sdfRendertarget.texture)
-        marchingDepthMaterial.depthPacking = RGBADepthPacking
-        marchingDepthMaterial.uniforms.gridSize.value = gridSize
-        marchingDepthMaterial.uniforms.gridCellSize.value = gridCellSize
-        this.marchingMesh = new Mesh( new PlaneGeometry(2,2), marchingMaterial)        
-        this.marchingMesh.customDepthMaterial = this.marchingMesh.customDistanceMaterial = marchingDepthMaterial
-        this.marchingMesh.castShadow = true
-        this.marchingMesh.receiveShadow = true
-        this.marchingMesh.frustumCulled = false
-        this.marchingMesh.onBeforeRender = renderer=>{
-            renderer.getDrawingBufferSize(marchingMaterial.uniforms.resolution.value)
-        }
-        this.marchingMesh.onBeforeShadow = renderer=>{            
-            marchingDepthMaterial.uniforms.resolution.value.setScalar(renderer.getRenderTarget()!.width)
-        }
-        this.add(this.marchingMesh)
+        const gooPlane = new GooPlane(group)
+        gooPlane.frustumCulled = false
+        gooPlane.castShadow = false
+        gooPlane.receiveShadow = true
+        this.add(gooPlane)
+        this.gooPlane = gooPlane
     }
 
     private initParticle( renderer: WebGLRenderer ){
@@ -397,7 +450,7 @@ export class GooSimulator extends Group {
         renderer.setRenderTarget(restore.rendertarget,restore.activeCubeFace,restore.activeMipmapLevel)
     }
 
-    update( deltaTime: number, renderer: WebGLRenderer ){
+    update( deltaTime: number, renderer: WebGLRenderer, camera: Camera ){
 
         this.deltaTime += deltaTime
         let simulationRun = false
@@ -438,6 +491,8 @@ export class GooSimulator extends Group {
                 collider.wetinessCtx.update( renderer )
             }
         }
+        camera.updateMatrixWorld()
+        this.gooPlane.update(renderer,camera)
     }
 
     private swapRendertarget(){
