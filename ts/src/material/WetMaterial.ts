@@ -1,4 +1,4 @@
-import { AdditiveBlending, BufferAttribute, BufferGeometry, HalfFloatType, MathUtils, Matrix4, Mesh, MeshPhysicalMaterial, NearestFilter, OrthographicCamera, Points, RedFormat, RepeatWrapping, ShaderMaterial, Texture, TextureLoader, Vector2, WebGLRenderTarget, WebGLRenderer } from "three";
+import { AdditiveBlending, BufferAttribute, BufferGeometry, HalfFloatType, IUniform, MathUtils, Matrix4, Mesh, MeshPhysicalMaterial, NearestFilter, OrthographicCamera, Points, RedFormat, RepeatWrapping, ShaderMaterial, Texture, TextureLoader, Vector2, WebGLRenderTarget, WebGLRenderer } from "three";
 import { gooColor } from "../deviceSetting.js";
 
 const v_2 = new Vector2
@@ -173,7 +173,7 @@ export class WetinessContext extends Points {
 
     constructor(
         mesh: Mesh,
-        sdfTexture: Texture,
+        tGrid: Texture,
         gridSize: number,
         gridCellSize: number,
         colliderMatrix: Matrix4
@@ -198,7 +198,7 @@ export class WetinessContext extends Points {
 
         const mat = new ShaderMaterial({
             uniforms: {
-                tSDF: { value: sdfTexture },
+                tGrid: { value: tGrid },
                 gridSize: { value: gridSize },
                 gridCellSize: { value: gridCellSize },
                 colliderMatrix: { value: colliderMatrix }
@@ -206,7 +206,7 @@ export class WetinessContext extends Points {
             vertexShader: `
             #include <common>
 
-            uniform sampler2D tSDF;
+            uniform sampler2D tGrid;
             uniform float gridSize;
             uniform float gridCellSize;
             uniform mat4 colliderMatrix;
@@ -215,80 +215,48 @@ export class WetinessContext extends Points {
 
             varying float vWetiness;
 
-            float sampleDistance( vec3 wPos ){
-                vec3 gridPos = wPos/gridCellSize+gridSize/2.0;
-
-                vec3 gridPosAligned[8] = vec3[](
-                    vec3(ceil(gridPos.x),ceil(gridPos.y),ceil(gridPos.z)),
-                    vec3(ceil(gridPos.x),ceil(gridPos.y),floor(gridPos.z)),
-                    vec3(ceil(gridPos.x),floor(gridPos.y),ceil(gridPos.z)),
-                    vec3(ceil(gridPos.x),floor(gridPos.y),floor(gridPos.z)),
-                    vec3(floor(gridPos.x),ceil(gridPos.y),ceil(gridPos.z)),
-                    vec3(floor(gridPos.x),ceil(gridPos.y),floor(gridPos.z)),
-                    vec3(floor(gridPos.x),floor(gridPos.y),ceil(gridPos.z)),
-                    vec3(floor(gridPos.x),floor(gridPos.y),floor(gridPos.z))
-                );
-                float distances[8];
-
-                vec3 gridPosClamped;
-                float gridId;
-                vec2 gridTextureSize = vec2(textureSize(tSDF,0));
-                vec2 uv;
-                #pragma unroll_loop_start 
-                for ( int i = 0; i < 8; i ++ ) {
-                    gridPosClamped = clamp(
-                        gridPosAligned[ i ],
-                        0.0,
-                        gridSize-1.0
-                    );
-                    gridId = gridPosClamped.x+(gridPosClamped.y+gridPosClamped.z*gridSize)*gridSize;
-                    uv = vec2(
-                        mod( gridId, gridTextureSize.x ),
-                        floor(gridId/gridTextureSize.y)
-                    )/gridTextureSize;
-
-                    distances[ i ] = texture2D(tSDF, uv).r;            
-                }
-                #pragma unroll_loop_end
-                vec3 blend = 1.0-(gridPos-gridPosAligned[7]);
-                float distance = mix(
-                    mix(
-                        mix(
-                            distances[0],
-                            distances[4],
-                            blend.x
-                        ),
-                        mix(
-                            distances[2],
-                            distances[6],
-                            blend.x
-                        ),
-                        blend.y
-                    ),
-                    mix(
-                        mix(
-                            distances[1],
-                            distances[5],
-                            blend.x
-                        ),
-                        mix(
-                            distances[3],
-                            distances[7],
-                            blend.x
-                        ),
-                        blend.y
-                    ),
-                    blend.z
-                );
-
-                return distance;
+            int imod( int a, int b ){
+                return a-(a/b)*b;
             }
 
             void main(){
                 vec4 wPos = colliderMatrix*vec4(position,1);
-                float distance = sampleDistance(wPos.xyz);
 
-                vWetiness = saturate(1.0-distance/0.001);
+                vec2 gridTextureSize = vec2( textureSize( tGrid, 0 ) );
+                float _distance = 1.0;
+                int x, y, z;
+                vec3 dir;
+                vec3 gridPos;
+                float gridId;
+                vec2 gridUv;
+                vec4 gridValue;
+                #pragma unroll_loop_start 
+                for ( int i = 0; i < 27; i ++ ) {
+                    x = imod(UNROLLED_LOOP_INDEX,3)-1;
+                    y = imod(UNROLLED_LOOP_INDEX/3,3)-1;
+                    z = UNROLLED_LOOP_INDEX/9-1;
+                
+                    dir = vec3( x, y, z );
+                    gridPos = clamp(
+                        wPos.xyz/gridCellSize+dir+gridSize*0.5,
+                        0.0,
+                        gridSize-1.0
+                    );
+                    gridId = gridPos.x+(gridPos.y+gridPos.z*gridSize)*gridSize;
+                    gridUv = (vec2(
+                        mod( gridId, gridTextureSize.x ),
+                        floor(gridId/gridTextureSize.x)
+                    )+0.5)/gridTextureSize;
+
+                    gridValue = texture2D( tGrid, gridUv );
+
+                    if( gridValue.w!=0.0 ){
+                        _distance = 0.0;
+                    }
+                }
+                #pragma unroll_loop_end
+
+                vWetiness = saturate(1.0-_distance/0.001);
 
                 gl_Position = vec4( wetinessUv*2.0-1.0, 0, 1 );
                 gl_PointSize = 1.0;

@@ -1,6 +1,5 @@
 import { BufferAttribute, BufferGeometry, Camera, CapsuleGeometry, ClampToEdgeWrapping, Color, FloatType, Group, IUniform, InstancedBufferAttribute, InstancedMesh, MathUtils, Mesh, NearestFilter, OrthographicCamera, RGBAFormat, RedFormat, SphereGeometry, Texture, Vector2, Vector3, WebGLMultipleRenderTargets, WebGLRenderTarget, WebGLRenderer } from "three";
 import { MeshBVH, MeshBVHUniformStruct } from "three-mesh-bvh";
-import { SDFGenerator } from "./SDFGenerator.js";
 import { InitMaterial } from "./material/InitMaterial.js";
 import { FullScreenQuad } from "three/examples/jsm/Addons";
 import { ParticleMaterial } from "./material/ParticleMaterial.js";
@@ -28,8 +27,6 @@ const breakLinkDistance = formLinkDistance*8
 const fixedTimeStep = 1/60
 
 const gridCellSize = radius*2
-
-const sdfGenerator = new SDFGenerator
 
 function createInstancedMesh(
     particleCount: number,
@@ -308,7 +305,6 @@ export class GooSimulator extends Group {
         wetinessCtx: WetinessContext
     }[]
 
-    private sdfRendertarget: WebGLRenderTarget
     private uniforms = {
         tPosition: { value: null } as IUniform<Texture | null>,
         tLink: { value: null } as IUniform<Texture | null>,
@@ -363,17 +359,6 @@ export class GooSimulator extends Group {
             wrapT: ClampToEdgeWrapping
         })
 
-        const sdfRenderTargetWidth = MathUtils.ceilPowerOfTwo(Math.pow(gridSize,3/2))
-        this.sdfRendertarget = new WebGLRenderTarget(sdfRenderTargetWidth,sdfRenderTargetWidth, {
-            format: RedFormat,
-            type: FloatType,
-            minFilter: NearestFilter,
-            magFilter: NearestFilter,
-            generateMipmaps: false,
-            wrapS: ClampToEdgeWrapping,
-            wrapT: ClampToEdgeWrapping
-        })
-
         this.colliders = colliders.map( m=>{
             const bvh = new MeshBVH(m.geometry)
             const bvhUniform = new MeshBVHUniformStruct()
@@ -381,13 +366,11 @@ export class GooSimulator extends Group {
             return {
                 mesh: m,
                 bvhUniform: bvhUniform,
-                wetinessCtx: new WetinessContext(m,this.sdfRendertarget.texture,gridSize,gridCellSize,m.matrixWorld)
+                wetinessCtx: new WetinessContext(m,this.gridRenderTarget.texture,gridSize,gridCellSize,m.matrixWorld)
             }
         })
 
         const group = new Group()
-        // group.visible = false
-        // this.add( group )
 
         const particleMaterial = new ParticleMaterial()
         particleMaterial.uniforms.tPosition = this.uniforms.tPosition
@@ -475,18 +458,6 @@ export class GooSimulator extends Group {
         renderer.autoClear = restore.autoClear
 
         if( simulationRun ){            
-            sdfGenerator.generate(
-                renderer,
-                this.sdfRendertarget,
-                this.gridSize,
-                gridCellSize,
-                this.particleCount,
-                this.uniforms.tPosition.value!,
-                this.uniforms.tLink.value!,
-                this.uniforms.tSurfaceLink.value!,
-                this.colliders,
-                radius
-            )
             for( let collider of this.colliders ){
                 collider.wetinessCtx.update( renderer )
             }

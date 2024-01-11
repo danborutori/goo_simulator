@@ -80,13 +80,6 @@ export class Application {
         this.camera.aspect = mainCanvas.width/mainCanvas.height
         this.camera.updateProjectionMatrix()
 
-        // const shadowDebugger = new ShadowMapDebugger(
-        //     (this.scene.getObjectByName("Light") as SpotLight).shadow
-        // )
-        // this.camera.add( shadowDebugger )
-        // shadowDebugger.position.set(0.2,0.2,-this.camera.near)
-        // shadowDebugger.scale.setScalar(0.2)
-
         const controls = new OrbitControls(this.camera, mainCanvas)
         controls.enablePan = false
         controls.enableZoom = false
