@@ -242,10 +242,10 @@ export class WetinessContext extends Points {
                         gridSize-1.0
                     );
                     gridId = gridPosClamped.x+(gridPosClamped.y+gridPosClamped.z*gridSize)*gridSize;
-                    uv = vec2(
+                    uv = (vec2(
                         mod( gridId, gridTextureSize.x ),
-                        floor(gridId/gridTextureSize.y)
-                    )/gridTextureSize;
+                        floor(gridId/gridTextureSize.x)
+                    )+0.5)/gridTextureSize;
 
                     distances[ i ] = texture2D(tSDF, uv).r;            
                 }
